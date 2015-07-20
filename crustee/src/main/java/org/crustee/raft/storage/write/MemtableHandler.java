@@ -42,7 +42,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
             memtable.freeze();
             Memtable oldMemtable = memtable;
             flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable));
-            memtable = new LockFreeBTree(16);
+            memtable = newMemtable();
             logger.info("created memtable");
         }
     }
@@ -62,8 +62,13 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     @Override
     public void onStart() {
-        memtable = new LockFreeBTree(16);
+        memtable = newMemtable();
+    }
+
+    private Memtable newMemtable() {
+        Memtable memtable = new LockFreeBTree(16);
         logger.info("created memtable " + System.identityHashCode(memtable));
+        return memtable;
     }
 
     @Override
