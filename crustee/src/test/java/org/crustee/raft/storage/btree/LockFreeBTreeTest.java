@@ -292,7 +292,7 @@ public class LockFreeBTreeTest {
         }
     }
 
-    private static final LockFreeBTree.ComparatorComparable comparator = new LockFreeBTree.ComparatorComparable();
+    private static final ComparableComparator comparator = new ComparableComparator();
 
     AtomicInteger nodeCount = new AtomicInteger();
 

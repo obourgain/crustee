@@ -92,7 +92,7 @@ public class LockFreeBTree implements Memtable {
     private WeakReference<Thread> writerThread;
 
     public LockFreeBTree(int size) {
-        this(new ComparatorComparable(), size);
+        this(new ComparableComparator(), size);
     }
 
     public LockFreeBTree(Comparator<Object> comparator, int size) {
@@ -132,7 +132,7 @@ public class LockFreeBTree implements Memtable {
         if (ASSERTION_ENABLED) {
             while (!pathStack.isEmpty()) {
                 Node node = pathStack.pop();
-                assert !node.isFull() : "node should not be full";
+                assert !node.isFull(this) : "node should not be full" + node;
             }
         } else {
             pathStack.clear();
@@ -231,20 +231,19 @@ public class LockFreeBTree implements Memtable {
         }
 
         // the BTree param is not pretty but avoids one pointer per Node if it was non static inner class
-        public int insert(LockFreeBTree bTree, Object key, Object value, Comparator<Object> comparator) {
+        public void insert(LockFreeBTree bTree, Object key, Object value, Comparator<Object> comparator) {
             int searchIndex = search(keys, 0, numberOfKeys(), key, comparator);
             Node node = insertAt(bTree, key, value, comparator, searchIndex);
             bTree.verifyInvariants();
-            if (node.isFull()) {
+            if (node.isFull(bTree)) {
                 split(bTree, node);
                 bTree.verifyInvariants();
             }
-            return searchIndex;
         }
 
         // returns the new node if a copy have been created or this if changed in place
         private Node insertAt(LockFreeBTree bTree, Object key, Object value, Comparator<Object> comparator, int searchIndex) {
-            assert !isFull() : "should be split preemptively";
+            assert !isFull(bTree) : "should be split preemptively";
             int insertIndex;
             if (searchIndex < 0) { // this is the -(index + 1) where we should insert
                 insertIndex = -searchIndex - 1;
@@ -335,7 +334,7 @@ public class LockFreeBTree implements Memtable {
                     nodeToSplit.replaceInParent(bTree, parent, newParent);
                     bTree.verifyInvariants(newParent);
                 }
-                if (newParent.isFull()) {
+                if (newParent.isFull(bTree)) {
                     bTree.verifyInvariants();
                     split(bTree, newParent);
                 }
@@ -441,8 +440,8 @@ public class LockFreeBTree implements Memtable {
             return ((long) i << shift) + base;
         }
 
-        public boolean isFull() {
-            return lastElement(keys) != null;
+        public boolean isFull(LockFreeBTree bTree) {
+            return numberOfKeys == bTree.size;
         }
 
     }
@@ -555,15 +554,6 @@ public class LockFreeBTree implements Memtable {
     private static void checkCondition(BooleanSupplier condition, Supplier<String> message) {
         if (!condition.getAsBoolean()) {
             throw new IllegalStateException(message.get());
-        }
-    }
-
-    protected static class ComparatorComparable implements Comparator<Object> {
-        @Override
-        public int compare(Object o1, Object o2) {
-            assert o1 != null && o1 instanceof Comparable;
-            assert o2 != null && o2.getClass() == o1.getClass() : "expecting same class, got " + o1.getClass() + " / " + (o2 == null ? null : o2.getClass());
-            return ((Comparable) o1).compareTo(o2);
         }
     }
 
