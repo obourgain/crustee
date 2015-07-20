@@ -26,11 +26,32 @@ import org.crustee.raft.storage.Memtable;
 import uk.co.real_logic.agrona.UnsafeAccess;
 
 /**
- * Single writer/multi-reader BTree.
+ * Single writer/multi-reader lock free BTree.
  * Use copy on write techniques for node modifications.
- * Reader only go down in the tree and
+ * <li>adding a new value in free space is done using atomic ops, setting the value first then the key to avoid a reader seeing the key but not yet the value</li>
+ * <li>replacing a value is done with ordered put for value and then a volatile set on the value (may probable be avoided)</li>
+ * <li>inserting a value copies the node, shift the keys, values and children to make room, insert the new KV and replace the node with the copy in the parent
+ * (or sets the root) with a volatile set</li>
  * <p>
- * Preemptively splits : when a node is full after an insert it is split, so we can only have transiently full nodes and only for writer
+ * <p>
+ * Reader only go down in the tree and use volatile reads.
+ * <p>
+ * <p>
+ * When a node is almost full (one slot left) we split the node, so we avoid the need to recursively split the parents by always having a free
+ * slot in the nodes.
+ * <p>
+ * <p>
+ * The structure is safe for writing by only one thread, and the method to traverse it like {@link Memtable#applyInOrder(BiConsumer)}
+ * or {@link #executeOnEachNode(Consumer)} are unsafe to use when the BTree is still mutated.
+ * The object may be frozen to indicate that no more mutations will happen by calling {@link #freeze()}, the tree may then be safely
+ * traversed by an other thread.
+ * If assertions are enabled, an {@link AssertionError} will be thrown if an operation requires to be done on the writer thread or
+ * after a {@link #freeze()}.
+ * <p>
+ * <p>
+ * Using a persistent datastructure would generate more garbage on inserts but avoid the need for volatile read (except the root)
+ * and would allow snapshotting of the tree. Garbage generation would be limited by the maximum size of a memtable and aggressively
+ * reusing keys/values/children arrays, so it is worth trying.
  */
 public class LockFreeBTree implements Memtable {
 
@@ -103,14 +124,18 @@ public class LockFreeBTree implements Memtable {
         try {
             doInsert(key, value, root);
         } finally {
-            if (ASSERTION_ENABLED) {
-                while (!pathStack.isEmpty()) {
-                    Node node = pathStack.pop();
-                    assert !node.isFull() : "node should not be full";
-                }
-            } else {
-                pathStack.clear();
+            clearWriterPathStack();
+        }
+    }
+
+    private void clearWriterPathStack() {
+        if (ASSERTION_ENABLED) {
+            while (!pathStack.isEmpty()) {
+                Node node = pathStack.pop();
+                assert !node.isFull() : "node should not be full";
             }
+        } else {
+            pathStack.clear();
         }
     }
 
@@ -151,38 +176,35 @@ public class LockFreeBTree implements Memtable {
 
     public Object get(Object key) {
         Node node = root;
-        outer:
-        while (true) {
-            verifyInvariants(node);
+        return doGet(key, node);
+    }
 
-            int i;
-            // do NOT use numberOfKeys() as it may be inconsistent with real node content and has no visibility guarantees
-            for (i = 0; i < node.keys.length; i++) {
-                Object k = node.keyAt(i);
-                if (k == null) {
-                    break;
-                }
-                int compare = comparator.compare(key, k);
-                if (compare < 0) {
-                    if (node.hasChildren()) {
-                        node = node.childAt(i);
-                        continue outer;
-                    } else {
-                        return null;
-                    }
-                }
-                if (compare == 0) {
-                    return node.valueAt(i);
-                }
-            }
-
-            // we have tried all keys and are still greater
-            if (node.hasChildren()) {
-                node = node.childAt(i);
-            } else {
+    private Object doGet(Object key, Node node) {
+        verifyInvariants(node);
+        if (node.isLeaf()) {
+            int index = ArrayUtils.linearSearch(node.keys, key, comparator);
+            if (index < 0) {
                 return null;
             }
+            return node.valueAt(index);
         }
+
+        int i;
+        for (i = 0; i < node.numberOfKeys(); i++) {
+            Object k = node.keys[i];
+            int compare = comparator.compare(key, k);
+            if (compare < 0) {
+                // lesser, we go to the left child
+                Node child = node.childAt(i);
+                Object value = doGet(key, child);
+                return value;
+            }
+            if (compare == 0) {
+                return node.valueAt(i);
+            }
+        }
+        Node child = node.childAt(i);
+        return doGet(key, child);
     }
 
     protected static class Node {
