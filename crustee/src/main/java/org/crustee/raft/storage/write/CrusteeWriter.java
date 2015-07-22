@@ -68,7 +68,7 @@ public class CrusteeWriter {
         logger.info("did some warmup, now let's go for {} inserts", BENCH_COUNT);
         long start = System.currentTimeMillis();
         for (long l = 0; l < BENCH_COUNT; l++) {
-            ByteBuffer key = ByteBuffer.allocate(KEY_SIZE);
+            ByteBuffer key = ByteBuffer.allocate(randomKeySize());
             ByteBuffer value = ByteBuffer.allocate(randomValueSize());
             key.putLong(0, l);
             value.putLong(0, l);
@@ -80,6 +80,12 @@ public class CrusteeWriter {
         disruptor.shutdown();
 
         System.exit(0);
+    }
+
+    private static int randomKeySize() {
+        double random = Math.random();
+        int result = (int) (8 * random) - 4 + KEY_SIZE;
+        return result;
     }
 
     private static int randomValueSize() {
