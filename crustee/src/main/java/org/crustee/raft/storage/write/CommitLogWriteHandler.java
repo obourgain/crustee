@@ -18,7 +18,7 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
     private final int maxSizeInBytes = 1024 * 1024;
 
     private int sizeInBytes = 0;
-    private final ByteBuffer[] buffered = new ByteBuffer[maxEvents * 2];
+    private final ByteBuffer[] buffered = new ByteBuffer[maxEvents];
     private int nextBufferIndex = 0;
 
     public CommitLogWriteHandler(CommitLog commitLog) {
@@ -27,11 +27,11 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
-        buffered[nextBufferIndex] = event.getKey();
-        buffered[nextBufferIndex + 1] = event.getValue();
+        buffered[nextBufferIndex] = event.getCommand();
         nextBufferIndex++;
-        nextBufferIndex++;
-        sizeInBytes += event.getKey().limit();
+        sizeInBytes += event.getCommand().limit();
+        // it is safe to buffer stuff because we won't publish the next sequence and thus allow
+        // the next consumer to catch up until we receive a endOfBatch = true
         if (endOfBatch || nextBufferIndex >= maxEvents || sizeInBytes >= maxSizeInBytes) {
             commitLog.write(buffered, nextBufferIndex);
             Arrays.fill(buffered, null);

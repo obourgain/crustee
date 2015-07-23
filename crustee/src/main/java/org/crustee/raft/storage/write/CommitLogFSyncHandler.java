@@ -24,7 +24,7 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
         eventCount++;
-        unsyncedSizeInBytes += event.getKey().limit() + event.getValue().limit();
+        unsyncedSizeInBytes += event.getRowKey().limit(); // + event.getValues().limit(); TODO log the value
         Segment old;
         // sync all old commit logs
         while ((old = commitLog.getOldSegments().poll()) != null) {

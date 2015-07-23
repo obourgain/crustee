@@ -49,6 +49,7 @@ public class ArrayStack<T> {
     }
 
     public void clear() {
+        nextIndex = 0;
         // release references to any nodes referenced here to free garbage
         Object[] array = this.array;
         for (int i = 0; i < array.length; i++) {
@@ -58,6 +59,7 @@ public class ArrayStack<T> {
             }
             array[i] = null;
         }
+
 
 //        int i = 0;
 //        final l = this.array.length;

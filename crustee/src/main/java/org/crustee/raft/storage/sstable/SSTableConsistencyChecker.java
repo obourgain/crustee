@@ -76,7 +76,7 @@ public class SSTableConsistencyChecker {
         int indexValueSize = indexEntryMetadata.getInt();
 
         verify(() -> tableKeySize == indexKeySize, () -> format("at entry %s, keys do not have the same length in table and index: %s / %s", entryIndex, tableKeySize, indexKeySize));
-        verify(() -> tableValueSize == indexValueSize, () -> format("at entry %s, values do not have the same length in table and index: %s / %s", entryIndex, tableKeySize, indexKeySize));
+        verify(() -> tableValueSize == indexValueSize, () -> format("at entry %s, columns do not have the same length in table and index: %s / %s", entryIndex, tableKeySize, indexKeySize));
 
         ByteBuffer tableKeyBuffer = buffers.tableKeyBuffer(tableKeySize);
         ByteBuffer valueBuffer = buffers.valueBuffer(tableValueSize);

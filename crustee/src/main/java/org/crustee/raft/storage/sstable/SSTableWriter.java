@@ -12,9 +12,12 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Iterator;
 import org.crustee.raft.storage.Memtable;
+import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
+import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.LongArrayList;
+import com.carrotsearch.hppc.cursors.IntCursor;
 import com.carrotsearch.hppc.cursors.LongCursor;
 
 public class SSTableWriter implements AutoCloseable {
@@ -29,6 +32,7 @@ public class SSTableWriter implements AutoCloseable {
     private final FileChannel tableChannel;
 
     private final LongArrayList valuesOffsets;
+    private final IntArrayList entriesSize;
 
     protected SSTableHeader header;
     protected State completedState = State.NOTHING;
@@ -40,6 +44,7 @@ public class SSTableWriter implements AutoCloseable {
         this.index = index;
         this.memtable = memtable;
         this.valuesOffsets = new LongArrayList(memtable.getCount());
+        this.entriesSize = new IntArrayList(memtable.getCount());
 
         this.tableChannel = openChannel(table, WRITE);
         this.indexChannel = openChannel(index, WRITE);
@@ -85,54 +90,69 @@ public class SSTableWriter implements AutoCloseable {
         assert completedState == State.TEMPORAY_HEADER;
         assert position(tableChannel) == SSTableHeader.BUFFER_SIZE;
 
-        memtable.applyInOrder((k, v) -> writeTableEntry((ByteBuffer) k, (ByteBuffer) v));
+        memtable.applyInOrder((k, v) -> writeTableEntry((ByteBuffer) k, v));
     }
 
-    private void writeTableEntry(ByteBuffer key, ByteBuffer value) {
-        ByteBuffer keyValueLengthBuffer = ByteBuffer.allocate(2 + 4);
+    private void writeTableEntry(ByteBuffer key, Row value) {
         assert key.limit() <= Short.MAX_VALUE;
-        assert value.limit() <= Short.MAX_VALUE;
+        assert key.position() == 0;
+
+        SerializedRow serializedRow = Serializer.serialize(value);
+        int totalSize = serializedRow.totalSize();
+
+        ByteBuffer keyValueLengthBuffer = ByteBuffer.allocate(2 + 4);
         keyValueLengthBuffer.putShort((short) key.limit());
-        keyValueLengthBuffer.putInt(value.limit());
-        UncheckedIOUtils.write(tableChannel, new ByteBuffer[]{
+        keyValueLengthBuffer.putInt(totalSize);
+
+        ByteBuffer[] buffers = concat(
                 (ByteBuffer) keyValueLengthBuffer.flip(),
-                (ByteBuffer) key.position(0),
-                (ByteBuffer) value.position(0)
-        });
-        // reset to correct state after writing
-        key.position(0);
-        value.position(0);
+                // we have to duplicate because a reader may get a reference to the key while we are writing
+                key.duplicate(),
+                serializedRow.getBuffers()
+        );
+
+        UncheckedIOUtils.write(tableChannel, buffers);
 
         offset += keyValueLengthBuffer.limit() + key.limit();
         valuesOffsets.add(offset);
-        offset += value.limit();
+        entriesSize.add(totalSize);
+        offset += totalSize;
+    }
+
+    private ByteBuffer[] concat(ByteBuffer keyValueLengthBuffer, ByteBuffer rowKey, ByteBuffer[] buffers) {
+        ByteBuffer[] result = new ByteBuffer[1 + 1 + buffers.length];
+        result[0] = keyValueLengthBuffer;
+        result[1] = rowKey;
+        System.arraycopy(buffers, 0, result, 2, buffers.length);
+        return result;
     }
 
     private void writeIndex() {
         assert completedState == State.TABLE;
         ByteBuffer keySizeOffsetAndValueSize = ByteBuffer.allocate(2 + 8 + 4);
         Iterator<LongCursor> offsets = valuesOffsets.iterator();
+        Iterator<IntCursor> sizes = entriesSize.iterator();
         memtable.applyInOrder((k, v) -> {
             assert offsets.hasNext();
+            assert sizes.hasNext();
             long nextOffset = offsets.next().value;
-            writeIndexEntry((ByteBuffer) k, (ByteBuffer) v, keySizeOffsetAndValueSize, nextOffset);
+            int nextEntrySize = sizes.next().value;
+            writeIndexEntry((ByteBuffer) k, keySizeOffsetAndValueSize, nextOffset, nextEntrySize);
         });
     }
 
-    private void writeIndexEntry(ByteBuffer key, ByteBuffer value, ByteBuffer keySizeOffsetAndValueSize, long nextOffset) {
+    private void writeIndexEntry(ByteBuffer key, ByteBuffer keySizeOffsetAndValueSize, long nextOffset, int serializedValueSize) {
         assert key.limit() <= Short.MAX_VALUE;
         keySizeOffsetAndValueSize.clear();
+
         keySizeOffsetAndValueSize.putShort((short) key.limit())
                 .putLong(nextOffset)
-                .putInt(value.limit())
+                .putInt(serializedValueSize)
                 .flip();
         UncheckedIOUtils.write(indexChannel, new ByteBuffer[]{
                 keySizeOffsetAndValueSize,
-                (ByteBuffer) key.position(0)
+                (ByteBuffer) key.duplicate().position(0)
         });
-        // reset to correct state after writing
-        key.position(0);
-        value.position(0);
     }
 
     public void close() {

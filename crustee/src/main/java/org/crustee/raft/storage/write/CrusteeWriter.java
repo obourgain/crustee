@@ -3,6 +3,8 @@ package org.crustee.raft.storage.write;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import org.crustee.raft.storage.commitlog.CommitLog;
@@ -54,11 +56,7 @@ public class CrusteeWriter {
         WriteEventProducer producer = new WriteEventProducer(ringBuffer);
 
         for (long l = 0; l < WARMUP_COUNT; l++) {
-            ByteBuffer key = ByteBuffer.allocate(KEY_SIZE);
-            ByteBuffer value = ByteBuffer.allocate(VAlUE_SIZE);
-            key.putLong(0, l);
-            value.putLong(0, l);
-            producer.onWriteRequest(key, value);
+            publishEvent(producer, l);
         }
         try {
             MILLISECONDS.sleep(1000);
@@ -68,11 +66,7 @@ public class CrusteeWriter {
         logger.info("did some warmup, now let's go for {} inserts", BENCH_COUNT);
         long start = System.currentTimeMillis();
         for (long l = 0; l < BENCH_COUNT; l++) {
-            ByteBuffer key = ByteBuffer.allocate(randomKeySize());
-            ByteBuffer value = ByteBuffer.allocate(randomValueSize());
-            key.putLong(0, l);
-            value.putLong(0, l);
-            producer.onWriteRequest(key, value);
+            publishEvent(producer, l);
         }
         long end = System.currentTimeMillis();
         System.out.println("duration: " + (end - start));
@@ -80,6 +74,18 @@ public class CrusteeWriter {
         disruptor.shutdown();
 
         System.exit(0);
+    }
+
+    private static void publishEvent(WriteEventProducer producer, long l) {
+        int keySize = randomKeySize();
+        int valueSize = randomValueSize();
+        ByteBuffer command = ByteBuffer.allocate(keySize + valueSize);
+        ByteBuffer key = (ByteBuffer) command.duplicate().limit(keySize);
+        ByteBuffer columnValue = ByteBuffer.allocate(valueSize);
+        Map<ByteBuffer, ByteBuffer> value = Collections.singletonMap(ByteBuffer.allocate(keySize), columnValue);
+        key.putLong(0, l);
+        columnValue.putLong(0, l);
+        producer.onWriteRequest(command, key, value);
     }
 
     private static int randomKeySize() {

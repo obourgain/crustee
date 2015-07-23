@@ -1,16 +1,21 @@
 package org.crustee.raft.storage;
 
+import java.util.Map;
 import java.util.function.BiConsumer;
+import org.crustee.raft.storage.row.Row;
 
 public interface Memtable {
 
-    <K, V> void applyInOrder(BiConsumer<K, V> action);
+    <K> void applyInOrder(BiConsumer<K, Row> action);
 
     int getCount();
 
-    <V> V get(V key);
+    <K> Row get(K key);
 
-    <V> void insert(V key, V value);
+    /**
+     * Modifications are isolated at the row level.
+     */
+    <K1, K2, V> void insert(K1 rowKey, Map<K2, V> values);
 
     void freeze();
 }

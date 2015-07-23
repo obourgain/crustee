@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.crustee.raft.storage.Memtable;
 import org.crustee.raft.storage.btree.LockFreeBTree;
 import org.crustee.raft.storage.sstable.SSTableWriter;
+import org.crustee.raft.utils.ByteBufferUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 import com.lmax.disruptor.EventHandler;
@@ -31,9 +32,8 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
-        event.getKey().position(0);
-        event.getValue().position(0);
-        memtable.insert(event.getKey(), event.getValue());
+        event.getRowKey().position(0);
+        memtable.insert(event.getRowKey(), event.getValues());
         if (sequence % 10_000_000 == 0) {
             logger.info("inserted event {}", sequence);
         }
@@ -66,7 +66,8 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     }
 
     private Memtable newMemtable() {
-        Memtable memtable = new LockFreeBTree(16);
+//        Memtable memtable = new LockFreeBTree(16);
+        Memtable memtable = new LockFreeBTree(ByteBufferUtils.lengthFirstComparator(), 16);
         logger.info("created memtable " + System.identityHashCode(memtable));
         return memtable;
     }
