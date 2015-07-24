@@ -38,7 +38,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
 
     <groupId>org.crustee</groupId>
     <artifactId>bench</artifactId>
-    <version>1.10.1</version>
+    <version>1.10.3</version>
     <packaging>jar</packaging>
 
     <name>JMH benchmark sample: Java</name>
@@ -67,7 +67,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
     </dependencies>
 
     <properties>
-        <jmh.version>1.10.1</jmh.version>
+        <jmh.version>1.10.3</jmh.version>
         <uberjar.name>benchmarks</uberjar.name>
     </properties>
 
