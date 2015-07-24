@@ -38,7 +38,7 @@ public class SSTableReader implements AutoCloseable {
      * Find the offset where the value of the searched key is located in the SSTable file, or -1
      */
     public KVLocalisation findKVLocalisation(ByteBuffer searchedKey) {
-        assert searchedKey.limit() <= Short.SIZE : "key may not be longer than " + Short.MAX_VALUE + " bytes";
+        assert searchedKey.limit() >= Short.SIZE : "key may not be longer than " + Short.MAX_VALUE + " bytes";
 
         short searchedKeySize = (short) searchedKey.limit();
         ByteBuffer keyBuffer = ByteBuffer.allocate(searchedKeySize);
