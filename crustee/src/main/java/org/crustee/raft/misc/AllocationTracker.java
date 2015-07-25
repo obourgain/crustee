@@ -65,9 +65,10 @@ public class AllocationTracker {
         return recordedForThisRun;
     }
 
-    public void startRecording() {
+    public AllocationTracker startRecording() {
         checkOwnerThread();
         allocatedAtStartTracking = threadMXBean.getThreadAllocatedBytes(threadId);
+        return this;
     }
 
     private void checkOwnerThread() {
