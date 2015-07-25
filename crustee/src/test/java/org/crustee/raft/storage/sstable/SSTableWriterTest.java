@@ -22,7 +22,7 @@ public class SSTableWriterTest {
     static final int VALUE_SIZE = 100;
 
     @Rule
-    public TemporaryFolder temporaryFolder = new TemporaryFolder(new File("/home/olivier/temp"));
+    public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
     public void should_write_header() throws Exception {

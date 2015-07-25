@@ -20,7 +20,7 @@ public class SSTableReaderTest {
     static final int VALUE_SIZE = 100;
 
     @Rule
-    public TemporaryFolder temporaryFolder = new TemporaryFolder(new File("/home/olivier/temp"));
+    public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     File table;
     File index;
