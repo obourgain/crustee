@@ -1,8 +1,6 @@
 package org.crustee.raft.storage.sstable;
 
 import static org.crustee.raft.utils.UncheckedIOUtils.openChannel;
-import static org.crustee.raft.utils.UncheckedIOUtils.position;
-import static org.crustee.raft.utils.UncheckedIOUtils.setPosition;
 import static org.crustee.raft.utils.UncheckedIOUtils.size;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
@@ -13,7 +11,6 @@ import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 
-// TODO this is not thread safe as the channel's position is shared
 public class SSTableReader implements AutoCloseable {
 
     private static final Logger logger = getLogger(SSTableReader.class);
@@ -45,26 +42,26 @@ public class SSTableReader implements AutoCloseable {
         ByteBuffer keyBuffer = ByteBuffer.allocate(searchedKeySize);
         ByteBuffer keySizeOffsetValueSize = ByteBuffer.allocate(2 + 8 + 4);
 
-        long read = 0;
+        long position = 0;
         // TODO what if the file is corrupted and have wrong size ?
-        while (read < indexFileSize) {
+        while (position < indexFileSize) {
             keySizeOffsetValueSize.clear();
-            UncheckedIOUtils.read(indexChannel, keySizeOffsetValueSize);
-            read += keySizeOffsetValueSize.capacity();
+            UncheckedIOUtils.read(indexChannel, keySizeOffsetValueSize, position);
+            position += keySizeOffsetValueSize.capacity();
             keySizeOffsetValueSize.flip();
             // TODO we could read the size and offset of next K here while reading the current K to save an io
             short keySize = keySizeOffsetValueSize.getShort();
-            if(searchedKeySize != keySize) {
+            if (searchedKeySize != keySize) {
+                position += keySize;
                 // the key size is not the same, don't even bother to compare those, go to next entry
-                setPosition(indexChannel, position(indexChannel) + keySize);
                 continue;
             }
 
             keyBuffer.clear();
-            UncheckedIOUtils.read(indexChannel, keyBuffer);
-            read += keySize;
+            UncheckedIOUtils.read(indexChannel, keyBuffer, position);
+            position += keySize;
             keyBuffer.flip();
-            if(searchedKey.equals(keyBuffer)) {
+            if (searchedKey.equals(keyBuffer)) {
                 long offset = keySizeOffsetValueSize.getLong();
                 int valueSize = keySizeOffsetValueSize.getInt();
                 return new KVLocation(keySize, offset, valueSize);
