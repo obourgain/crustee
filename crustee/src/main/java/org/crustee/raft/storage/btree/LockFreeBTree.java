@@ -6,7 +6,6 @@ import static org.crustee.raft.storage.btree.ArrayUtils.copyRangeToStartOfOther;
 import static org.crustee.raft.storage.btree.ArrayUtils.copyWhole;
 import static org.crustee.raft.storage.btree.ArrayUtils.findIndexOfInstance;
 import static org.crustee.raft.storage.btree.ArrayUtils.hasGaps;
-import static org.crustee.raft.storage.btree.ArrayUtils.lastElement;
 import static org.crustee.raft.storage.btree.ArrayUtils.lastNonNullElement;
 import static org.crustee.raft.storage.btree.ArrayUtils.linearSearch;
 import static org.crustee.raft.storage.btree.ArrayUtils.occupancy;
@@ -17,12 +16,16 @@ import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.Memtable;
+import org.crustee.raft.storage.row.MapRow;
+import org.crustee.raft.storage.row.Row;
+import org.crustee.raft.utils.ComparableComparator;
 import uk.co.real_logic.agrona.UnsafeAccess;
 
 /**
@@ -30,16 +33,13 @@ import uk.co.real_logic.agrona.UnsafeAccess;
  * Use copy on write techniques for node modifications.
  * <li>adding a new value in free space is done using atomic ops, setting the value first then the key to avoid a reader seeing the key but not yet the value</li>
  * <li>replacing a value is done with ordered put for value and then a volatile set on the value (may probable be avoided)</li>
- * <li>inserting a value copies the node, shift the keys, values and children to make room, insert the new KV and replace the node with the copy in the parent
+ * <li>inserting a value copies the node, shift the keys, columns and children to make room, insert the new KV and replace the node with the copy in the parent
  * (or sets the root) with a volatile set</li>
- * <p>
  * <p>
  * Reader only go down in the tree and use volatile reads.
  * <p>
- * <p>
  * When a node is almost full (one slot left) we split the node, so we avoid the need to recursively split the parents by always having a free
  * slot in the nodes.
- * <p>
  * <p>
  * The structure is safe for writing by only one thread, and the method to traverse it like {@link Memtable#applyInOrder(BiConsumer)}
  * or {@link #executeOnEachNode(Consumer)} are unsafe to use when the BTree is still mutated.
@@ -48,10 +48,9 @@ import uk.co.real_logic.agrona.UnsafeAccess;
  * If assertions are enabled, an {@link AssertionError} will be thrown if an operation requires to be done on the writer thread or
  * after a {@link #freeze()}.
  * <p>
- * <p>
  * Using a persistent datastructure would generate more garbage on inserts but avoid the need for volatile read (except the root)
  * and would allow snapshotting of the tree. Garbage generation would be limited by the maximum size of a memtable and aggressively
- * reusing keys/values/children arrays, so it is worth trying.
+ * reusing keys/columns/children arrays, so it is worth trying.
  */
 public class LockFreeBTree implements Memtable {
 
@@ -92,10 +91,10 @@ public class LockFreeBTree implements Memtable {
     private WeakReference<Thread> writerThread;
 
     public LockFreeBTree(int size) {
-        this(new ComparableComparator(), size);
+        this(ComparableComparator.get(), size);
     }
 
-    public LockFreeBTree(Comparator<Object> comparator, int size) {
+    public LockFreeBTree(Comparator comparator, int size) {
         this.comparator = comparator;
         this.size = size;
         this.median = size / 2;
@@ -117,69 +116,58 @@ public class LockFreeBTree implements Memtable {
         this.frozen = true;
     }
 
-    public void insert(Object key, Object value) {
+    public <K1, K2, V> void insert(K1 rowKey, Map<K2, V> values) {
         assert !frozen;
+        assert pathStack.isEmpty();
         currentThreadIsWriter();
-        pathStack.reset();
         try {
-            doInsert(key, value, root);
+            doInsert(rowKey, values, root);
         } finally {
             clearWriterPathStack();
         }
     }
 
-    private void clearWriterPathStack() {
-        if (ASSERTION_ENABLED) {
-            while (!pathStack.isEmpty()) {
-                Node node = pathStack.pop();
-                assert !node.isFull(this) : "node should not be full" + node;
-            }
-        } else {
-            pathStack.clear();
-        }
-    }
-
-    private void doInsert(Object key, Object value, Node node) {
+    private void doInsert(Object rowKey, Map values, Node node) {
         verifyInvariants(node);
         if (node.isLeaf()) {
             // insert in this node
-            node.insert(this, key, value, comparator);
+            node.insert(this, rowKey, values, comparator);
             return;
         }
 
         int i;
         for (i = 0; i < node.numberOfKeys(); i++) {
             Object k = node.keys[i];
-            int compare = comparator.compare(key, k);
+            int compare = comparator.compare(rowKey, k);
             if (compare < 0) {
                 // lesser, we go to the left child
-                doInsertInChild(key, value, node, i);
+                doInsertInChild(rowKey, values, node, i);
                 return;
             }
             if (compare == 0) {
-                node.set(key, value, i);
+                node.set(rowKey, values, i);
                 return;
             }
         }
 
         // greater, we go to the right child or set it here if leaf
         // don't add +1 to go to the right child because the loop already incremented i
-        doInsertInChild(key, value, node, i);
+        doInsertInChild(rowKey, values, node, i);
     }
 
-    private void doInsertInChild(Object key, Object value, Node node, int i) {
+    private void doInsertInChild(Object rowKey, Map values, Node node, int i) {
         Node tmp = node.fastChildAt(i, this);
         assert tmp != null;
         pathStack.push(node);
-        doInsert(key, value, tmp);
+        doInsert(rowKey, values, tmp);
     }
 
-    public Object get(Object key) {
+    public <K> Row get(K key) {
         Node node = root;
         return doGet(key, node);
     }
 
-    private Object doGet(Object key, Node node) {
+    private <K> Row doGet(Object key, Node node) {
         verifyInvariants(node);
         if (node.isLeaf()) {
             int index = ArrayUtils.linearSearch(node.keys, key, comparator);
@@ -196,7 +184,7 @@ public class LockFreeBTree implements Memtable {
             if (compare < 0) {
                 // lesser, we go to the left child
                 Node child = node.childAt(i);
-                Object value = doGet(key, child);
+                Row value = doGet(key, child);
                 return value;
             }
             if (compare == 0) {
@@ -210,13 +198,13 @@ public class LockFreeBTree implements Memtable {
     protected static class Node {
         protected final Node[] children;
         protected final Object[] keys;
-        protected final Object[] values;
+        protected final Row[] columns;
         private int numberOfKeys;
 
         private Node(int size, boolean withChildren) {
             children = withChildren ? new Node[size + 1] : EMPTY;
             keys = new Object[size];
-            values = new Object[size];
+            columns = new Row[size];
             numberOfKeys = 0;
         }
 
@@ -231,9 +219,9 @@ public class LockFreeBTree implements Memtable {
         }
 
         // the BTree param is not pretty but avoids one pointer per Node if it was non static inner class
-        public void insert(LockFreeBTree bTree, Object key, Object value, Comparator<Object> comparator) {
-            int searchIndex = search(keys, 0, numberOfKeys(), key, comparator);
-            Node node = insertAt(bTree, key, value, comparator, searchIndex);
+        public void insert(LockFreeBTree bTree, Object rowKey, Map values, Comparator<Object> comparator) {
+            int searchIndex = search(keys, 0, numberOfKeys(), rowKey, comparator);
+            Node node = insertAt(bTree, rowKey, values, comparator, searchIndex);
             bTree.verifyInvariants();
             if (node.isFull(bTree)) {
                 split(bTree, node);
@@ -242,7 +230,7 @@ public class LockFreeBTree implements Memtable {
         }
 
         // returns the new node if a copy have been created or this if changed in place
-        private Node insertAt(LockFreeBTree bTree, Object key, Object value, Comparator<Object> comparator, int searchIndex) {
+        private Node insertAt(LockFreeBTree bTree, Object rowKey, Map values, Comparator<Object> comparator, int searchIndex) {
             assert !isFull(bTree) : "should be split preemptively";
             int insertIndex;
             if (searchIndex < 0) { // this is the -(index + 1) where we should insert
@@ -251,7 +239,7 @@ public class LockFreeBTree implements Memtable {
                     // move stuff
                     Node newNode = copyShifted(insertIndex);
                     newNode.numberOfKeys++;
-                    newNode.fastSet(key, value, insertIndex, bTree);
+                    newNode.fastSet(rowKey, values, insertIndex, bTree);
                     bTree.count++;
                     if (bTree.pathStack.isEmpty()) {
                         // adding to root
@@ -261,7 +249,7 @@ public class LockFreeBTree implements Memtable {
                     }
                     return newNode;
                 } else {
-                    this.set(key, value, insertIndex);
+                    this.set(rowKey, values, insertIndex);
                     numberOfKeys++;
                     bTree.count++;
                     return this;
@@ -269,8 +257,8 @@ public class LockFreeBTree implements Memtable {
             } else {
                 // overwrite existing
                 assert keys[searchIndex] != null;
-                assert comparator.compare(key, keys[searchIndex]) == 0;
-                this.set(key, value, searchIndex);
+                assert comparator.compare(rowKey, keys[searchIndex]) == 0;
+                this.set(rowKey, values, searchIndex);
                 return this;
             }
         }
@@ -288,7 +276,7 @@ public class LockFreeBTree implements Memtable {
             int leftEnd = bTree.median - 1;
             int rightStart = bTree.median + 1;
             Object medianKey = nodeToSplit.keys[bTree.median];
-            Object medianValue = nodeToSplit.values[bTree.median];
+            Row medianValue = nodeToSplit.columns[bTree.median];
             int size = bTree.size;
             boolean withChildren = nodeToSplit.hasChildren();
 
@@ -296,11 +284,11 @@ public class LockFreeBTree implements Memtable {
             Node right = new Node(size, withChildren);
 
             copyRangeToStartOfOther(nodeToSplit.keys, left.keys, 0, leftEnd + 1);
-            copyRangeToStartOfOther(nodeToSplit.values, left.values, 0, leftEnd + 1);
+            copyRangeToStartOfOther(nodeToSplit.columns, left.columns, 0, leftEnd + 1);
             left.numberOfKeys = leftEnd + 1;
 
             copyRangeToStartOfOther(nodeToSplit.keys, right.keys, rightStart, size - rightStart);
-            copyRangeToStartOfOther(nodeToSplit.values, right.values, rightStart, size - rightStart);
+            copyRangeToStartOfOther(nodeToSplit.columns, right.columns, rightStart, size - rightStart);
             right.numberOfKeys = size - rightStart;
 
             if (withChildren) {
@@ -313,7 +301,7 @@ public class LockFreeBTree implements Memtable {
                 // splitting root
                 Node newRoot = new Node(size, true);
                 newRoot.setChildrenAround(left, right, 0);
-                newRoot.fastSet(medianKey, medianValue, 0, bTree);
+                newRoot.fastSetRow(medianKey, medianValue, 0, bTree);
                 newRoot.numberOfKeys++;
                 bTree.root = newRoot;
                 bTree.verifyInvariants(newRoot);
@@ -324,7 +312,7 @@ public class LockFreeBTree implements Memtable {
                 int medianInsertIndex = -medianSearchIndex - 1;
 
                 Node newParent = parent.fastHasKeyAt(medianInsertIndex, bTree) ? parent.copyShifted(medianInsertIndex) : parent.copy();
-                newParent.fastSet(medianKey, medianValue, medianInsertIndex, bTree);
+                newParent.fastSetRow(medianKey, medianValue, medianInsertIndex, bTree);
                 newParent.setChildrenAround(left, right, medianInsertIndex);
                 newParent.numberOfKeys++;
                 if (bTree.pathStack.isEmpty()) {
@@ -345,7 +333,7 @@ public class LockFreeBTree implements Memtable {
         private Node copy() {
             Node newNode = new Node(keys.length, hasChildren());
             copyWhole(keys, newNode.keys);
-            copyWhole(values, newNode.values);
+            copyWhole(columns, newNode.columns);
             if (hasChildren()) {
                 copyWhole(children, newNode.children);
             }
@@ -355,7 +343,7 @@ public class LockFreeBTree implements Memtable {
 
         private Node copyShifted(int shiftFrom) {
             Node newNode = copy();
-            shiftBothOneStep(newNode.keys, newNode.values, shiftFrom);
+            shiftBothOneStep(newNode.keys, newNode.columns, shiftFrom);
             if (hasChildren()) {
                 shiftOneStep(newNode.children, shiftFrom + 1);
             }
@@ -411,29 +399,47 @@ public class LockFreeBTree implements Memtable {
             return UNSAFE.getObjectVolatile(keys, byteOffset(index));
         }
 
-        public Object valueAt(int index) {
-            return UNSAFE.getObjectVolatile(values, byteOffset(index));
+        public Row valueAt(int index) {
+            return (Row) UNSAFE.getObjectVolatile(columns, byteOffset(index));
         }
 
-        public Object fastValueAt(int index, LockFreeBTree bTree) {
+        public Row fastValueAt(int index, LockFreeBTree bTree) {
             bTree.currentThreadIsWriter();
-            return values[index];
+            return columns[index];
         }
 
-        public void set(Object key, Object value, int index) {
+        public void set(Object rowKey, Map values, int index) {
             // set value first with set ordered to ensure that an other seeing the value will see it fully,
             // then set key with barrier to ensure visibility of both
-            UNSAFE.putOrderedObject(values, byteOffset(index), value);
-            UNSAFE.putObjectVolatile(keys, byteOffset(index), key);
+            if (columns[index] == null) {
+                UNSAFE.putOrderedObject(columns, byteOffset(index), new MapRow(values));
+            } else {
+                // row handle thread safety internally
+                columns[index].addAll(values);
+            }
+            UNSAFE.putObjectVolatile(keys, byteOffset(index), rowKey);
         }
 
         /**
          * Do not enforce visibility, use only when an other op guarantee safe publication
          */
-        public void fastSet(Object key, Object value, int index, LockFreeBTree bTree) {
+        public void fastSet(Object rowKey, Map values, int index, LockFreeBTree bTree) {
             bTree.currentThreadIsWriter();
-            values[index] = value;
-            keys[index] = key;
+            if (columns[index] == null) {
+                columns[index] = new MapRow(values);
+            } else {
+                columns[index].addAll(values);
+            }
+            keys[index] = rowKey;
+        }
+
+        /**
+         * Do not enforce visibility, use only when an other op guarantee safe publication
+         */
+        public void fastSetRow(Object rowKey, Row row, int index, LockFreeBTree bTree) {
+            bTree.currentThreadIsWriter();
+            columns[index] = row;
+            keys[index] = rowKey;
         }
 
         private static long byteOffset(int i) {
@@ -508,12 +514,12 @@ public class LockFreeBTree implements Memtable {
 
     private void verifyInvariants(Node node, boolean skipSizeCheck) {
         Object[] keys = node.keys;
-        Object[] values = node.values;
+        Object[] values = node.columns;
         Node[] children = node.children;
 
         // no gaps
         checkCondition(() -> !hasGaps(keys), () -> "there are gaps in keys" + Arrays.toString(keys));
-        checkCondition(() -> !hasGaps(values), () -> "there are gaps in values" + Arrays.toString(values));
+        checkCondition(() -> !hasGaps(values), () -> "there are gaps in columns" + Arrays.toString(values));
         checkCondition(() -> !hasGaps(children), () -> "there are gaps in children" + Arrays.toString(children));
 
         // correct number of entries in each array
@@ -521,7 +527,7 @@ public class LockFreeBTree implements Memtable {
             int keysOccupancy = occupancy(keys);
             int valuesOccupancy = occupancy(values);
             int childrenOccupancy = occupancy(children);
-            checkCondition(() -> keysOccupancy == valuesOccupancy, () -> "incorrect number of key and values" + Arrays.toString(keys) + " / " + Arrays.toString(values));
+            checkCondition(() -> keysOccupancy == valuesOccupancy, () -> "incorrect number of key and columns" + Arrays.toString(keys) + " / " + Arrays.toString(values));
             if (!node.isLeaf() && node != root) {
                 checkCondition(() -> keysOccupancy + 1 == childrenOccupancy, () -> format("incorrect number of key and children %s / %s : %s / %s", keysOccupancy, childrenOccupancy, Arrays.toString(keys), Arrays.toString(children)));
             }
@@ -549,6 +555,17 @@ public class LockFreeBTree implements Memtable {
             }
         }
 
+    }
+
+    private void clearWriterPathStack() {
+        if (ASSERTION_ENABLED) {
+            while (!pathStack.isEmpty()) {
+                Node node = pathStack.pop();
+                assert !node.isFull(this) : "node should not be full" + node;
+            }
+        } else {
+            pathStack.clear();
+        }
     }
 
     private static void checkCondition(BooleanSupplier condition, Supplier<String> message) {
@@ -588,20 +605,20 @@ public class LockFreeBTree implements Memtable {
      * Use only from writer thread or after a freeze()
      * The consumer must not modify the keys
      */
-    public <K, V> void applyInOrder(BiConsumer<K, V> action) {
+    public <K> void applyInOrder(BiConsumer<K, Row> action) {
         currentThreadIsWriter();
         Node root = this.root;
         applyInOrder(action, root);
     }
 
-    private <K, V> void applyInOrder(BiConsumer<K, V> action, Node node) {
+    private <K> void applyInOrder(BiConsumer<K, Row> action, Node node) {
         int numberOfKeys = node.numberOfKeys();
         for (int i = 0; i < numberOfKeys; i++) {
             if (node.hasChildren() && node.fastHasChildAt(i, this)) {
                 applyInOrder(action, node.fastChildAt(i, this));
             }
 
-            action.accept((K) node.fastKeyAt(i, this), (V) node.fastValueAt(i, this));
+            action.accept((K) node.fastKeyAt(i, this), node.fastValueAt(i, this));
         }
         int lastChildIndex = numberOfKeys;
         if (node.hasChildren() && node.fastHasChildAt(lastChildIndex, this)) {

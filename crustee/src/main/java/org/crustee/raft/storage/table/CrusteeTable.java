@@ -3,7 +3,8 @@ package org.crustee.raft.storage.table;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.crustee.raft.storage.Memtable;
-import org.crustee.raft.storage.sstable.KVLocalisation;
+import org.crustee.raft.storage.row.Row;
+import org.crustee.raft.storage.sstable.KVLocation;
 import org.crustee.raft.storage.sstable.SSTableReader;
 
 public class CrusteeTable {
@@ -16,13 +17,13 @@ public class CrusteeTable {
         this.readers = readers;
     }
 
-    public ByteBuffer get(ByteBuffer key) {
-        ByteBuffer value = memtable.get(key);
+    public Row get(ByteBuffer key) {
+        Row value = memtable.get(key);
         if (value != null) {
             return value;
         }
         for (SSTableReader reader : readers) {
-            KVLocalisation localisation = reader.findKVLocalisation(key);
+            KVLocation localisation = reader.findKVLocalisation(key);
             if (localisation.isFound()) {
                 value = reader.get(localisation);
                 assert value != null : "value not found in table but present in index " + localisation;
@@ -31,7 +32,6 @@ public class CrusteeTable {
         }
         return null;
     }
-
 
 
 }

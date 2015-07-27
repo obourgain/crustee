@@ -1,26 +1,29 @@
 package org.crustee.raft.storage.write;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 public class WriteEvent {
 
-    private ByteBuffer key;
-    private ByteBuffer value;
+    private ByteBuffer rowKey;
+    private ByteBuffer command;
+    private Map values;
 
-    public ByteBuffer getKey() {
-        return key;
+    public ByteBuffer getRowKey() {
+        return rowKey;
     }
 
-    public void setKey(ByteBuffer key) {
-        this.key = key;
+    public Map getValues() {
+        return values;
     }
 
-    public ByteBuffer getValue() {
-        return value;
+    public ByteBuffer getCommand() {
+        return command;
     }
 
-    public void setValue(ByteBuffer value) {
-        this.value = value;
+    public void publish(ByteBuffer command, ByteBuffer rowKey, Map values) {
+        this.command = command;
+        this.rowKey = rowKey;
+        this.values = values;
     }
-
 }
