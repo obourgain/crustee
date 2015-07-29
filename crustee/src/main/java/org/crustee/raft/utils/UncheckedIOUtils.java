@@ -1,19 +1,24 @@
 package org.crustee.raft.utils;
 
+import java.io.Flushable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channel;
 import java.nio.channels.FileChannel;
+import java.nio.channels.GatheringByteChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.ScatteringByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 public class UncheckedIOUtils {
 
-    public static long write(FileChannel channel, ByteBuffer[] buffers) {
+    public static long write(GatheringByteChannel channel, ByteBuffer[] buffers) {
         try {
             return channel.write(buffers, 0, buffers.length);
         } catch (IOException e) {
@@ -29,7 +34,7 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static int write(FileChannel channel, ByteBuffer buffer) {
+    public static int write(WritableByteChannel channel, ByteBuffer buffer) {
         try {
             return channel.write(buffer);
         } catch (IOException e) {
@@ -37,7 +42,15 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static long read(FileChannel channel, ByteBuffer[] buffers) {
+    public static void flush(Flushable flushable) {
+        try {
+            flushable.flush();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static long read(ScatteringByteChannel channel, ByteBuffer[] buffers) {
         try {
             return channel.read(buffers);
         } catch (IOException e) {
@@ -45,7 +58,7 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static int read(FileChannel channel, ByteBuffer buffer) {
+    public static int read(ReadableByteChannel channel, ByteBuffer buffer) {
         try {
             return channel.read(buffer);
         } catch (IOException e) {
@@ -61,7 +74,7 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static void close(FileChannel channel) {
+    public static void close(Channel channel) {
         try {
             channel.close();
         } catch (IOException e) {
@@ -78,7 +91,7 @@ public class UncheckedIOUtils {
     }
 
     public static void fsyncDir(Path path) {
-        try(FileChannel channel = openChannel(path, StandardOpenOption.READ)) {
+        try (FileChannel channel = openChannel(path, StandardOpenOption.READ)) {
             channel.force(true);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
