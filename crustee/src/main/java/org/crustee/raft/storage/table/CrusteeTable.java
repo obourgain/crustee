@@ -2,7 +2,7 @@ package org.crustee.raft.storage.table;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import org.crustee.raft.storage.Memtable;
+import org.crustee.raft.storage.memtable.Memtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.storage.sstable.KVLocation;
 import org.crustee.raft.storage.sstable.SSTableReader;

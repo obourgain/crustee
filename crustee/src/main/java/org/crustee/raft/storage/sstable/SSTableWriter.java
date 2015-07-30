@@ -11,7 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Iterator;
-import org.crustee.raft.storage.Memtable;
+import org.crustee.raft.storage.memtable.Memtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;

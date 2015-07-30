@@ -7,10 +7,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import org.crustee.raft.storage.Memtable;
-import org.crustee.raft.storage.btree.LockFreeBTree;
+import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
+import org.crustee.raft.storage.memtable.Memtable;
 import org.crustee.raft.storage.sstable.SSTableWriter;
-import org.crustee.raft.utils.ByteBufferUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 import com.lmax.disruptor.EventHandler;
@@ -66,8 +65,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     }
 
     private Memtable newMemtable() {
-//        Memtable memtable = new LockFreeBTree(16);
-        Memtable memtable = new LockFreeBTree(ByteBufferUtils.lengthFirstComparator(), 16);
+        Memtable memtable = new LockFreeBTreeMemtable();
         logger.info("created memtable " + System.identityHashCode(memtable));
         return memtable;
     }

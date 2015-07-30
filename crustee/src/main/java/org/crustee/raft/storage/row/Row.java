@@ -15,4 +15,5 @@ public interface Row {
      */
     Map<ByteBuffer, ByteBuffer> asMap();
 
+    long getEstimatedSizeInBytes();
 }
