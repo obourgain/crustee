@@ -32,6 +32,13 @@ public class ByteBufferUtils {
         return ByteBuffer.allocate(size);
     }
 
+    public static ByteBuffer advance(ByteBuffer buffer, int steps) {
+        int newPosition = buffer.position() + steps;
+        assert newPosition <= buffer.limit();
+        buffer.position(newPosition);
+        return buffer;
+    }
+
     private static final Comparator<ByteBuffer> lengthFirstComparator = new Comparator<ByteBuffer>() {
         @Override
         public int compare(ByteBuffer o1, ByteBuffer o2) {

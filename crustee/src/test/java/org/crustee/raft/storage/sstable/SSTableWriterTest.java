@@ -70,6 +70,7 @@ public class SSTableWriterTest {
                 writer.write();
 
                 long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
+                        Integer.BYTES + // number of columns in the row
                         Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
                         SSTableHeader.BUFFER_SIZE;
                 long tableFileSize = table.length();

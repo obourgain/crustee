@@ -6,7 +6,7 @@ public class SerializedRow {
 
     private final ByteBuffer[] buffers;
 
-    public SerializedRow(ByteBuffer[] buffers) {
+    public SerializedRow(ByteBuffer... buffers) {
         this.buffers = buffers;
     }
 
