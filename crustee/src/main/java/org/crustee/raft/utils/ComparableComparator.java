@@ -2,7 +2,7 @@ package org.crustee.raft.utils;
 
 import java.util.Comparator;
 
-public class ComparableComparator implements Comparator<Object> {
+public class ComparableComparator<K> implements Comparator<K> {
 
     private static final ComparableComparator instance = new ComparableComparator();
 
@@ -10,13 +10,14 @@ public class ComparableComparator implements Comparator<Object> {
     }
 
     @Override
-    public int compare(Object o1, Object o2) {
+    public int compare(K o1, K o2) {
         assert o1 != null && o1 instanceof Comparable;
         assert o2 != null && o2.getClass() == o1.getClass() : "expecting same class, got " + o1.getClass() + " / " + (o2 == null ? null : o2.getClass());
-        return ((Comparable) o1).compareTo(o2);
+        return ((Comparable<K>) o1).compareTo(o2);
     }
 
-    public static Comparator<Object> get() {
-        return instance;
+    public static <K> Comparator<K> get() {
+        return (Comparator<K>) instance;
     }
+
 }

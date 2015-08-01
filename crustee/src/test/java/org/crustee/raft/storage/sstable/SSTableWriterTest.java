@@ -11,8 +11,8 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.IntStream;
-import org.crustee.raft.storage.Memtable;
-import org.crustee.raft.storage.btree.LockFreeBTree;
+import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
+import org.crustee.raft.storage.memtable.Memtable;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -122,14 +122,14 @@ public class SSTableWriterTest {
         }
     }
 
-    private LockFreeBTree createMemtable(int entries) {
-        LockFreeBTree bTree = new LockFreeBTree(16);
-        IntStream.range(0, entries).forEach(i -> bTree.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i).putInt(4, i),
+    private Memtable createMemtable(int entries) {
+        Memtable memtable = new LockFreeBTreeMemtable();
+        IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i).putInt(4, i),
                         singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
                                 ByteBuffer.allocate(VALUE_SIZE).putInt(0, i)))
         );
-        return bTree;
+        return memtable;
     }
 
 }
