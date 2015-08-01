@@ -6,14 +6,23 @@ import java.util.TreeMap;
 
 public class MapRow implements Row {
 
-    private volatile TreeMap<ByteBuffer, ByteBuffer> map = new TreeMap<>();
     private volatile long estimatedSizeInBytes = 0;
+    private volatile TreeMap<ByteBuffer, ByteBuffer> map;
 
     public MapRow(Map<ByteBuffer, ByteBuffer> values) {
+        map = new TreeMap<>();
         map.putAll(values);
-        for (Map.Entry<ByteBuffer, ByteBuffer> entry : map.entrySet()) {
-            estimatedSizeInBytes += entry.getKey().limit() + entry.getValue().limit();
+        estimatedSizeInBytes = size(map);
+    }
+
+    public MapRow(TreeMap<ByteBuffer, ByteBuffer> values, boolean copy) {
+        if (copy) {
+            this.map = new TreeMap<>();
+            this.map.putAll(values);
+        } else {
+            this.map = values;
         }
+        estimatedSizeInBytes = size(map);
     }
 
     @Override
@@ -42,5 +51,13 @@ public class MapRow implements Row {
     @Override
     public long getEstimatedSizeInBytes() {
         return estimatedSizeInBytes;
+    }
+
+    private long size(Map<ByteBuffer, ByteBuffer> map) {
+        long size = 0;
+        for (Map.Entry<ByteBuffer, ByteBuffer> entry : map.entrySet()) {
+            size += entry.getKey().limit() + entry.getValue().limit();
+        }
+        return size;
     }
 }

@@ -9,7 +9,9 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.sstable.SSTableReader;
 import org.crustee.raft.storage.sstable.SSTableWriter;
+import org.crustee.raft.storage.table.CrusteeTable;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 import com.lmax.disruptor.EventHandler;
@@ -28,6 +30,11 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
             });
 
     private Memtable memtable;
+    private final CrusteeTable table;
+
+    public MemtableHandler(CrusteeTable table) {
+        this.table = table;
+    }
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
@@ -40,13 +47,13 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
             logger.info("flushing memtable");
             memtable.freeze();
             Memtable oldMemtable = memtable;
-            flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable));
-            memtable = newMemtable();
+            flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table));
+            newMemtable();
             logger.info("created memtable");
         }
     }
 
-    private void writeSSTable(Memtable memtable) {
+    private void writeSSTable(Memtable memtable, CrusteeTable crusteeTable) {
         long start = System.currentTimeMillis();
         Path tablePath = UncheckedIOUtils.tempFile();
         Path indexPath = UncheckedIOUtils.tempFile();
@@ -56,18 +63,20 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
             e.printStackTrace();
         }
         long end = System.currentTimeMillis();
+        crusteeTable.memtableFlushed(memtable, new SSTableReader(tablePath, indexPath));
         logger.info("flush memtable duration {}", (end - start) + " for sstable " + tablePath + " index " + indexPath);
     }
 
     @Override
     public void onStart() {
-        memtable = newMemtable();
+        newMemtable();
     }
 
-    private Memtable newMemtable() {
+    private void newMemtable() {
         Memtable memtable = new LockFreeBTreeMemtable();
         logger.info("created memtable " + System.identityHashCode(memtable));
-        return memtable;
+        table.registerMemtable(memtable);
+        this.memtable = memtable;
     }
 
     @Override

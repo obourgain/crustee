@@ -86,10 +86,11 @@ public class SSTableReader implements AutoCloseable {
         }
     }
 
-    public Row get(KVLocation localisation) {
-        ByteBuffer buffer = ByteBuffer.allocate(localisation.getValueSize());
-        UncheckedIOUtils.read(tableChannel, buffer, localisation.getValueOffset());
+    public Row get(KVLocation location) {
+        assert location.isFound();
+        ByteBuffer buffer = ByteBuffer.allocate(location.getValueSize());
+        UncheckedIOUtils.read(tableChannel, buffer, location.getValueOffset());
         buffer.flip(); // ready to read
-        return null; // TODO deserialize Row
+        return Serializer.deserialize(new SerializedRow(buffer));
     }
 }

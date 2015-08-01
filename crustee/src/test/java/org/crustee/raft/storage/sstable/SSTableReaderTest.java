@@ -52,6 +52,7 @@ public class SSTableReaderTest {
                         // first entry with kv size, rowkey, row (kv size + columnkey + value)
                         (Short.BYTES + Integer.BYTES + // row key & value size
                                 ROW_KEY_SIZE +
+                                Integer.BYTES + // number of columns
                                 Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
                         // second entry with kv size
                         (Short.BYTES + Integer.BYTES) // second row key & value size
@@ -65,10 +66,9 @@ public class SSTableReaderTest {
         assertThat(location.getValueOffset()).isEqualTo(expectedValueOffset);
 
         Row value = reader.get(location);
-        // TODO deserialize value to check its state
-//        assertThat(value.asMap()).isEqualTo(VALUE_SIZE);
-//        assertThat(value.position()).isEqualTo(0);
-//        assertThat(value).isEqualTo(ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1));
+        assertThat(value.asMap()).isEqualTo(singletonMap(
+                ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, 1),
+                ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1)));
     }
 
     private Memtable createMemtable(int entries) {
