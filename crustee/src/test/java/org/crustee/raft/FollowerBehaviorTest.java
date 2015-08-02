@@ -44,7 +44,7 @@ public class FollowerBehaviorTest extends AbstractTest {
     }
 
     @Test
-    public void should_reject_install_snpshot_with_lower_term() throws Exception {
+    public void should_reject_install_snapshot_with_lower_term() throws Exception {
         RaftNode node = new RaftNode(messageBus, DEFAULT_CLOCK);
         node.currentTerm = 42;
         node.log.add(new LogEntry(1, "key", "value1", 1));

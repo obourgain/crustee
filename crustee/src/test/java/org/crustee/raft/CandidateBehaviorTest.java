@@ -111,7 +111,7 @@ public class CandidateBehaviorTest extends AbstractTest {
     }
 
     @Test
-    public void should_convert_to_leader_if_have_not_received_majority_of_votes() {
+    public void should_convert_to_candidate_if_have_not_received_majority_of_votes() {
         RaftNode node = new RaftNode(messageBus, DEFAULT_CLOCK);
         node.log.add(new LogEntry(1, "key", "value1", 1));
         node.currentTerm = 42;
