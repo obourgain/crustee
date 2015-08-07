@@ -4,7 +4,6 @@ import static java.util.Collections.singletonMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.stream.IntStream;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
@@ -29,17 +28,14 @@ public class SSTableReaderTest {
     File index;
 
     @Before
-    public void create_sstable() {
+    public void create_sstable() throws IOException {
         Memtable memtable = createMemtable(3);
-        try {
-            table = temporaryFolder.newFile();
-            index = temporaryFolder.newFile();
-            try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
-                writer.write();
-                new SSTableConsistencyChecker(table.toPath(), index.toPath(), Assert::fail).check();
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+
+        table = temporaryFolder.newFile();
+        index = temporaryFolder.newFile();
+        try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
+            writer.write();
+            new SSTableConsistencyChecker(table.toPath(), index.toPath(), Assert::fail).check();
         }
     }
 
