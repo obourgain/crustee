@@ -18,22 +18,17 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-public class SSTableWriterTest {
+public class SSTableWriterTest extends AbstractSSTableTest {
 
     static final int ROW_KEY_SIZE = 32;
     static final int COLUMN_KEY_SIZE = 16;
     static final int VALUE_SIZE = 100;
 
-    @Rule
-    public TemporaryFolder temporaryFolder = new TemporaryFolder();
-
     @Test
     public void should_write_header() throws IOException {
         Memtable memtable = createMemtable(10);
 
-        File table = temporaryFolder.newFile();
-        File index = temporaryFolder.newFile();
-        try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
+        test(memtable, (writer, table, index) -> {
             writer.writeTemporaryHeader();
 
             SSTableHeader tempHeader = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
@@ -50,7 +45,7 @@ public class SSTableWriterTest {
 
             SSTableHeader header = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
             assertThat(header).isEqualTo(writer.header);
-        }
+        });
     }
 
     @Test
@@ -58,9 +53,7 @@ public class SSTableWriterTest {
         int entries = 100_000;
         Memtable memtable = createMemtable(entries);
 
-        File table = temporaryFolder.newFile();
-        File index = temporaryFolder.newFile();
-        try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
+        test(memtable, (writer, table, index) -> {
             writer.write();
 
             long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
@@ -75,11 +68,7 @@ public class SSTableWriterTest {
             assertThat(indexFileSize).isEqualTo(expectedIndexSize);
 
             new SSTableConsistencyChecker(table.toPath(), index.toPath(), Assert::fail).check();
-        }
-        finally {
-            Files.deleteIfExists(table.toPath());
-            Files.deleteIfExists(index.toPath());
-        }
+        });
     }
 
     @Test
@@ -90,9 +79,10 @@ public class SSTableWriterTest {
             int entries = 1000_000;
             Memtable memtable = createMemtable(entries);
 
-            Path table = temporaryFolder.newFile().toPath();
-            Path index = temporaryFolder.newFile().toPath();
-            try (SSTableWriter writer = new SSTableWriter(table, index, memtable)) {
+            test(memtable, (writer, tbl, idx) -> {
+                Path table = tbl.toPath();
+                Path index = idx.toPath();
+
                 writer.write();
 
                 long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
@@ -106,11 +96,7 @@ public class SSTableWriterTest {
                 assertThat(indexFileSize).isEqualTo(expectedIndexSize);
 
                 new SSTableConsistencyChecker(table, index, Assert::fail).check();
-            }
-            finally {
-                Files.deleteIfExists(table);
-                Files.deleteIfExists(index);
-            }
+            });
 
             long end = System.currentTimeMillis();
             System.out.println("duration " + (end - start));
