@@ -79,13 +79,13 @@ public class RaftNode {
             if (rulesLoop == RulesLoop.NEXT_LOOP) return;
         }
 
-        long threshold = lastHeartbeat + electTimeout;
+        long deadline = lastHeartbeat + electTimeout;
         long current = clock.millis();
-        if (current > threshold) {
+        if (current > deadline) {
             if (role == Role.CANDIDATE) {
-                logger.info("election timeout elapsed threshold : {}, current: {}, restarting election", threshold, current);
+                logger.info("election timeout elapsed, deadline : {}, current: {}, restarting election", deadline, current);
             } else {
-                logger.info("heartbeat timeout elapsed threshold : {}, current: {}, converting to candidate", threshold, current);
+                logger.info("heartbeat timeout elapsed, deadline : {}, current: {}, converting to candidate", deadline, current);
             }
             convertToCandidate();
             return;
