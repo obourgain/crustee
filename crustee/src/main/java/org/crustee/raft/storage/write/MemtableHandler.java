@@ -4,7 +4,8 @@ import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
+import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.crustee.raft.storage.sstable.SSTableReader;
 import org.crustee.raft.storage.sstable.SSTableWriter;
 import org.crustee.raft.storage.table.CrusteeTable;
@@ -17,7 +18,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     private static final Logger logger = getLogger(MemtableHandler.class);
 
-    private Memtable memtable;
+    private WritableMemtable memtable;
     private final CrusteeTable table;
     private final ExecutorService flushMemtableExecutor;
 
@@ -35,15 +36,14 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
         }
         if (memtable.getCount() >= 1_000_000) {
             logger.info("flushing memtable");
-            memtable.freeze();
-            Memtable oldMemtable = memtable;
+            ReadOnlyMemtable oldMemtable = memtable.freeze();
             flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table));
             newMemtable();
             logger.info("created memtable");
         }
     }
 
-    private void writeSSTable(Memtable memtable, CrusteeTable crusteeTable) {
+    private void writeSSTable(ReadOnlyMemtable memtable, CrusteeTable crusteeTable) {
         long start = System.currentTimeMillis();
         Path tablePath = UncheckedIOUtils.tempFile();
         Path indexPath = UncheckedIOUtils.tempFile();
@@ -63,8 +63,8 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     }
 
     private void newMemtable() {
-        Memtable memtable = new LockFreeBTreeMemtable();
-        logger.info("created memtable {}", System.identityHashCode(memtable));
+        WritableMemtable memtable = new LockFreeBTreeMemtable();
+        logger.info("created memtable " + System.identityHashCode(memtable));
         table.registerMemtable(memtable);
         this.memtable = memtable;
     }

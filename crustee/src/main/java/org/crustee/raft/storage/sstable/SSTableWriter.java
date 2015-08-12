@@ -11,7 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Iterator;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
@@ -26,7 +26,7 @@ public class SSTableWriter implements AutoCloseable {
 
     private final Path table;
     private final Path index;
-    private final Memtable memtable;
+    private final ReadOnlyMemtable memtable;
 
     private final FileChannel indexChannel;
     private final FileChannel tableChannel;
@@ -39,7 +39,7 @@ public class SSTableWriter implements AutoCloseable {
 
     private long offset = 0;
 
-    public SSTableWriter(Path table, Path index, Memtable memtable) {
+    public SSTableWriter(Path table, Path index, ReadOnlyMemtable memtable) {
         this.table = table;
         this.index = index;
         this.memtable = memtable;

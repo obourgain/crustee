@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.assertj.core.util.VisibleForTesting;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.crustee.raft.utils.ComparableComparator;
 import uk.co.real_logic.agrona.UnsafeAccess;
 
@@ -39,7 +39,7 @@ import uk.co.real_logic.agrona.UnsafeAccess;
  * When a node is almost full (one slot left) we split the node, so we avoid the need to recursively split the parents by always having a free
  * slot in the nodes.
  * <p>
- * The structure is safe for writing by only one thread, and the method to traverse it like {@link Memtable#applyInOrder(BiConsumer)}
+ * The structure is safe for writing by only one thread, and the method to traverse it like {@link WritableMemtable#applyInOrder(BiConsumer)}
  * or {@link #executeOnEachNode(Consumer)} are unsafe to use when the BTree is still mutated.
  * The object may be frozen to indicate that no more mutations will happen by calling {@link #freeze()}, the tree may then be safely
  * traversed by an other thread.
