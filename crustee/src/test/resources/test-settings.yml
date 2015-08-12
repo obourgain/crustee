@@ -1,0 +1,2 @@
+ringbuffer.size: 2048
+commitlog.segment.size: 10

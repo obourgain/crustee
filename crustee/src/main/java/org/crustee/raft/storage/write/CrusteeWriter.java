@@ -1,5 +1,6 @@
 package org.crustee.raft.storage.write;
 
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
@@ -7,7 +8,10 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import org.crustee.raft.storage.commitlog.CommitLog;
+import org.crustee.raft.storage.commitlog.SegmentFactory;
 import org.crustee.raft.storage.table.CrusteeTable;
 import org.slf4j.Logger;
 import com.lmax.disruptor.BlockingWaitStrategy;
@@ -29,7 +33,7 @@ public class CrusteeWriter {
     // see https://github.com/LMAX-Exchange/disruptor/wiki/Getting-Started
 
     public static void main(String[] args) throws InterruptedException {
-        CommitLog commitLog = new CommitLog();
+        CommitLog commitLog = new CommitLog(new SegmentFactory(128*1024*1024));
 
         Executor executor = Executors.newCachedThreadPool();
 
@@ -44,9 +48,9 @@ public class CrusteeWriter {
         CrusteeTable crusteeTable = new CrusteeTable();
 
         RingBuffer<WriteEvent> ringBuffer = disruptor.getRingBuffer();
-        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog);
-        CommitLogFSyncHandler commitLogFSyncHandler = new CommitLogFSyncHandler(commitLog);
-        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable);
+        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog, 1024 * 1024, 1024);
+        CommitLogFSyncHandler commitLogFSyncHandler = new CommitLogFSyncHandler(commitLog, 1024 * 1024, 1024);
+        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000)));
 
         disruptor
                 .handleEventsWith(commitLogWriteHandler)

@@ -12,17 +12,16 @@ import org.crustee.raft.utils.UncheckedFutureUtils;
 
 public class CommitLog {
 
-    protected static final int SEGMENT_SIZE = 128*1024*1024;
-
     private Segment current;
     private Future<Segment> next;
     private BlockingQueue<Segment> oldSegments = new LinkedBlockingQueue<>();
 
     private WeakReference<Thread> owner;
 
-    private final SegmentFactory segmentFactory = new SegmentFactory(SEGMENT_SIZE);
+    private final SegmentFactory segmentFactory;
 
-    public CommitLog() {
+    public CommitLog(SegmentFactory segmentFactory) {
+        this.segmentFactory = segmentFactory;
         this.current = UncheckedFutureUtils.get(segmentFactory.newSegment());
         this.next = segmentFactory.newSegment();
     }

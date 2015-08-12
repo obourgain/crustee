@@ -12,14 +12,16 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
 
     private final CommitLog commitLog;
 
-    public CommitLogFSyncHandler(CommitLog commitLog) {
-        this.commitLog = commitLog;
-    }
-
     private final int maxEvents = 1000;
-    private final int maxUnsyncedSizeInBytes = 10 * 1024;
+
+    private final int maxUnsyncedSizeInBytes;
     private int eventCount = 0;
     private int unsyncedSizeInBytes = 0;
+
+    public CommitLogFSyncHandler(CommitLog commitLog, int maxUncommitedSize, int maxUnsyncedCount) {
+        this.commitLog = commitLog;
+        this.maxUnsyncedSizeInBytes = maxUncommitedSize;
+    }
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
