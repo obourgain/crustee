@@ -6,7 +6,6 @@ import static org.crustee.raft.storage.sstable.SSTableWriter.State.INDEX;
 import static org.crustee.raft.utils.UncheckedIOUtils.readAllToBuffer;
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,105 +18,86 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-public class SSTableWriterTest {
+public class SSTableWriterTest extends AbstractSSTableTest {
 
     static final int ROW_KEY_SIZE = 32;
     static final int COLUMN_KEY_SIZE = 16;
     static final int VALUE_SIZE = 100;
 
-    @Rule
-    public TemporaryFolder temporaryFolder = new TemporaryFolder();
-
     @Test
-    public void should_write_header() throws Exception {
+    public void should_write_header() throws IOException {
         Memtable memtable = createMemtable(10);
 
-        try {
-            File table = temporaryFolder.newFile();
-            File index = temporaryFolder.newFile();
-            try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
-                writer.writeTemporaryHeader();
+        test(memtable, (writer, table, index) -> {
+            writer.writeTemporaryHeader();
 
-                SSTableHeader tempHeader = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
-                // don't use isEqualTo to avoid comparing the completed field
-                assertThat(tempHeader.getSize()).isEqualTo(writer.header.getSize());
-                assertThat(tempHeader.getEntryCount()).isEqualTo(writer.header.getEntryCount());
+            SSTableHeader tempHeader = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
+            // don't use isEqualTo to avoid comparing the completed field
+            assertThat(tempHeader.getSize()).isEqualTo(writer.header.getSize());
+            assertThat(tempHeader.getEntryCount()).isEqualTo(writer.header.getEntryCount());
 
-                writer.completedState = INDEX;
-                writer.writeCompletedHeader();
+            writer.completedState = INDEX;
+            writer.writeCompletedHeader();
 
-                long expectedTableSize = SSTableHeader.BUFFER_SIZE;
-                long tableFileSize = table.length();
-                assertThat(tableFileSize).isEqualTo(expectedTableSize);
+            long expectedTableSize = SSTableHeader.BUFFER_SIZE;
+            long tableFileSize = table.length();
+            assertThat(tableFileSize).isEqualTo(expectedTableSize);
 
-                SSTableHeader header = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
-                assertThat(header).isEqualTo(writer.header);
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+            SSTableHeader header = SSTableHeader.fromBuffer(readAllToBuffer(table.toPath()));
+            assertThat(header).isEqualTo(writer.header);
+        });
     }
 
     @Test
-    public void should_write() throws Exception {
+    public void should_write() throws IOException {
         int entries = 100_000;
         Memtable memtable = createMemtable(entries);
 
-        try {
-            File table = temporaryFolder.newFile();
-            File index = temporaryFolder.newFile();
-            try (SSTableWriter writer = new SSTableWriter(table.toPath(), index.toPath(), memtable)) {
-                writer.write();
+        test(memtable, (writer, table, index) -> {
+            writer.write();
 
-                long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
-                        Integer.BYTES + // number of columns in the row
-                        Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
-                        SSTableHeader.BUFFER_SIZE;
-                long tableFileSize = table.length();
-                assertThat(tableFileSize).isEqualTo(expectedTableSize);
+            long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
+                    Integer.BYTES + // number of columns in the row
+                    Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
+                    SSTableHeader.BUFFER_SIZE;
+            long tableFileSize = table.length();
+            assertThat(tableFileSize).isEqualTo(expectedTableSize);
 
-                long expectedIndexSize = entries * (ROW_KEY_SIZE + 2 + 8 + 4); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
-                long indexFileSize = index.length();
-                assertThat(indexFileSize).isEqualTo(expectedIndexSize);
+            long expectedIndexSize = entries * (ROW_KEY_SIZE + 2 + 8 + 4); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
+            long indexFileSize = index.length();
+            assertThat(indexFileSize).isEqualTo(expectedIndexSize);
 
-                new SSTableConsistencyChecker(table.toPath(), index.toPath(), Assert::fail).check();
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+            new SSTableConsistencyChecker(table.toPath(), index.toPath(), Assert::fail).check();
+        });
     }
 
     @Test
     @Ignore("convert that into a proper jmh bench")
-    public void diry_perf_test() throws Exception {
+    public void diry_perf_test() throws IOException {
         for (int i = 0; i < 100; i++) {
             long start = System.currentTimeMillis();
             int entries = 1000_000;
             Memtable memtable = createMemtable(entries);
 
-            try {
-                Path table = temporaryFolder.newFile().toPath();
-                Path index = temporaryFolder.newFile().toPath();
-                try (SSTableWriter writer = new SSTableWriter(table, index, memtable)) {
-                    writer.write();
+            test(memtable, (writer, tbl, idx) -> {
+                Path table = tbl.toPath();
+                Path index = idx.toPath();
 
-                    long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
-                            Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
-                            SSTableHeader.BUFFER_SIZE;
-                    long tableFileSize = Files.size(table);
-                    assertThat(tableFileSize).isEqualTo(expectedTableSize);
+                writer.write();
 
-                    long expectedIndexSize = entries * (ROW_KEY_SIZE + 2 + 8 + 4); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
-                    long indexFileSize = Files.size(index);
-                    assertThat(indexFileSize).isEqualTo(expectedIndexSize);
+                long expectedTableSize = entries * (Short.BYTES + Integer.BYTES + ROW_KEY_SIZE + // row key & value size
+                        Short.BYTES + Integer.BYTES + COLUMN_KEY_SIZE + VALUE_SIZE) + // column key size + value size
+                        SSTableHeader.BUFFER_SIZE;
+                long tableFileSize = Files.size(table);
+                assertThat(tableFileSize).isEqualTo(expectedTableSize);
 
-                    new SSTableConsistencyChecker(table, index, Assert::fail).check();
-                }
-                Files.deleteIfExists(table);
-                Files.deleteIfExists(index);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+                long expectedIndexSize = entries * (ROW_KEY_SIZE + 2 + 8 + 4); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
+                long indexFileSize = Files.size(index);
+                assertThat(indexFileSize).isEqualTo(expectedIndexSize);
+
+                new SSTableConsistencyChecker(table, index, Assert::fail).check();
+            });
+
             long end = System.currentTimeMillis();
             System.out.println("duration " + (end - start));
         }
