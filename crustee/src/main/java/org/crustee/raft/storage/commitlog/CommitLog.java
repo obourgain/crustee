@@ -1,13 +1,12 @@
 package org.crustee.raft.storage.commitlog;
 
 import java.lang.ref.WeakReference;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
+import org.crustee.raft.storage.btree.ArrayUtils;
 import org.crustee.raft.utils.UncheckedFutureUtils;
 
 public class CommitLog {
@@ -26,19 +25,19 @@ public class CommitLog {
         this.next = segmentFactory.newSegment();
     }
 
-    public void write(ByteBuffer buffer, int size) {
+    public void write(ByteBuffer buffer, int length) {
         checkOwnerThread();
-        if(!current.canWrite(size)) {
+        if(!current.canWrite(length)) {
             oldSegments.add(current);
             current = UncheckedFutureUtils.get(next);
             next = segmentFactory.newSegment();
         }
-        current.append(buffer, size);
+        current.append(buffer, length);
     }
 
     public void write(ByteBuffer[] buffers, int length) {
         checkOwnerThread();
-        int sizeInBytes = Arrays.stream(buffers).filter(e -> e != null).mapToInt(Buffer::limit).sum();
+        int sizeInBytes = buffersSize(buffers, length);
         // TODO write as much a possible in the current log
         if(!current.canWrite(sizeInBytes)) {
             oldSegments.add(current);
@@ -46,6 +45,17 @@ public class CommitLog {
             next = segmentFactory.newSegment();
         }
         current.append(buffers, length);
+    }
+
+    protected static int buffersSize(ByteBuffer[] buffers, int length) {
+        assert ArrayUtils.lastNonNullElementIndex(buffers) + 1 == length : "off by one error " + Arrays.toString(buffers) + " / " + length;
+        long size = 0;
+        for (int i = 0; i < length; i++) {
+            size += buffers[i].limit();
+        }
+        // we don't want to write a big chunk at once in the log
+        assert size <= Integer.MAX_VALUE: "int overflow: " + size;
+        return (int) size;
     }
 
     private void checkOwnerThread() {
