@@ -8,7 +8,7 @@ import org.crustee.raft.storage.row.MapRow;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.ByteBufferUtils;
 
-public class LockFreeBTreeMemtable implements Memtable {
+public class LockFreeBTreeMemtable implements WritableMemtable {
 
     private final LockFreeBTree<ByteBuffer, Row> bTree = new LockFreeBTree<>(ByteBufferUtils.lengthFirstComparator(), 16, ByteBuffer.class, Row.class);
 
@@ -44,8 +44,9 @@ public class LockFreeBTreeMemtable implements Memtable {
     }
 
     @Override
-    public void freeze() {
+    public ReadOnlyMemtable freeze() {
         bTree.freeze();
+        return this;
     }
 
 

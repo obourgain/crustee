@@ -11,7 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.IntStream;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -26,7 +26,7 @@ public class SSTableWriterTest extends AbstractSSTableTest {
 
     @Test
     public void should_write_header() throws IOException {
-        Memtable memtable = createMemtable(10);
+        WritableMemtable memtable = createMemtable(10);
 
         test(memtable, (writer, table, index) -> {
             writer.writeTemporaryHeader();
@@ -51,7 +51,7 @@ public class SSTableWriterTest extends AbstractSSTableTest {
     @Test
     public void should_write() throws IOException {
         int entries = 100_000;
-        Memtable memtable = createMemtable(entries);
+        WritableMemtable memtable = createMemtable(entries);
 
         test(memtable, (writer, table, index) -> {
             writer.write();
@@ -77,7 +77,7 @@ public class SSTableWriterTest extends AbstractSSTableTest {
         for (int i = 0; i < 100; i++) {
             long start = System.currentTimeMillis();
             int entries = 1000_000;
-            Memtable memtable = createMemtable(entries);
+            WritableMemtable memtable = createMemtable(entries);
 
             test(memtable, (writer, tbl, idx) -> {
                 Path table = tbl.toPath();
@@ -103,8 +103,8 @@ public class SSTableWriterTest extends AbstractSSTableTest {
         }
     }
 
-    private Memtable createMemtable(int entries) {
-        Memtable memtable = new LockFreeBTreeMemtable();
+    private WritableMemtable createMemtable(int entries) {
+        WritableMemtable memtable = new LockFreeBTreeMemtable();
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i).putInt(4, i),
                         singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),

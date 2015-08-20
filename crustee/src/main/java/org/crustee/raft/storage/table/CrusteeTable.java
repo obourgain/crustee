@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.storage.sstable.KVLocation;
 import org.crustee.raft.storage.sstable.SSTableReader;
@@ -16,7 +16,7 @@ public class CrusteeTable {
     // memtable and sstables are sorted from older to most recent
     // so we can simply put relevant columns from every table to a map
     // and older values will be overwritten
-    private final CopyOnWriteArrayList<Memtable> memtables = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<ReadOnlyMemtable> memtables = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<SSTableReader> ssTableReaders = new CopyOnWriteArrayList<>();
 
     public SortedMap<ByteBuffer, ByteBuffer> get(ByteBuffer key) {
@@ -27,7 +27,7 @@ public class CrusteeTable {
         // We could assign a UUID to each memtable and sstable and deduplicate based rads with a set, but before adding this
         // we should evaluate and try to measure the real probability of seeing this double read, and
         // what is the real performance impact
-        Iterator<Memtable> memtableIterator = memtables.iterator();
+        Iterator<ReadOnlyMemtable> memtableIterator = memtables.iterator();
         Iterator<SSTableReader> ssTablesIterator = ssTableReaders.iterator();
 
         TreeMap<ByteBuffer, ByteBuffer> values = new TreeMap<>();
@@ -38,9 +38,9 @@ public class CrusteeTable {
         return values;
     }
 
-    private void searchInMemtables(ByteBuffer key, Iterator<Memtable> memtableIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+    private void searchInMemtables(ByteBuffer key, Iterator<ReadOnlyMemtable> memtableIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
         while(memtableIterator.hasNext()) {
-            Memtable memtable = memtableIterator.next();
+            ReadOnlyMemtable memtable = memtableIterator.next();
             Row row = memtable.get(key);
             if(row != null) {
                 values.putAll(row.asMap());
@@ -61,11 +61,11 @@ public class CrusteeTable {
         }
     }
 
-    public void registerMemtable(Memtable memtable) {
+    public void registerMemtable(ReadOnlyMemtable memtable) {
         memtables.add(memtable);
     }
 
-    public void memtableFlushed(Memtable memtable, SSTableReader ssTableReader) {
+    public void memtableFlushed(ReadOnlyMemtable memtable, SSTableReader ssTableReader) {
         // add the new sstable before removing the memtable to avoid having a window where the data may not be found
         ssTableReaders.add(ssTableReader);
         memtables.remove(memtable);

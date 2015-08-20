@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.stream.IntStream;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
-import org.crustee.raft.storage.memtable.Memtable;
+import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.junit.Assert;
 import org.junit.Before;
@@ -28,7 +28,7 @@ public class SSTableReaderTest extends AbstractSSTableTest {
 
     @Test
     public void should_find_value_offset() throws IOException {
-        Memtable memtable = createMemtable(3);
+        WritableMemtable memtable = createMemtable(3);
 
         test(memtable, SSTableReaderTest::init_sstable,
 	        (writer, table, index) -> {
@@ -60,8 +60,8 @@ public class SSTableReaderTest extends AbstractSSTableTest {
         });
     }
 
-    private Memtable createMemtable(int entries) {
-        Memtable memtable = new LockFreeBTreeMemtable();
+    private WritableMemtable createMemtable(int entries) {
+        WritableMemtable memtable = new LockFreeBTreeMemtable();
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i),
                         singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
