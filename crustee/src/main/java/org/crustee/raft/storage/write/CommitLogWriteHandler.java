@@ -14,15 +14,18 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
 
     private final CommitLog commitLog;
 
-    private final int maxEvents = 1000;
-    private final int maxSizeInBytes = 1024 * 1024;
+    private final int maxEvents;
+    private final int maxSizeInBytes;
 
     private int sizeInBytes = 0;
-    private final ByteBuffer[] buffered = new ByteBuffer[maxEvents];
+    private final ByteBuffer[] buffered;
     private int nextBufferIndex = 0;
 
-    public CommitLogWriteHandler(CommitLog commitLog) {
+    public CommitLogWriteHandler(CommitLog commitLog, int maxSizeInBytes, int maxEvents) {
         this.commitLog = commitLog;
+        this.maxSizeInBytes = maxSizeInBytes;
+        this.maxEvents = maxEvents;
+        buffered = new ByteBuffer[this.maxEvents];
     }
 
     @Override

@@ -3,6 +3,7 @@ package org.crustee.raft.storage.commitlog;
 import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
+import static org.crustee.raft.settings.WellKnownSettings.COMMITLOG_SEGMENT_SIZE;
 import static org.crustee.raft.utils.UncheckedIOUtils.fsyncDir;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.crustee.raft.settings.Settings;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 
@@ -29,8 +31,8 @@ public class SegmentFactory {
     private final int size;
     private final ExecutorService executor;
 
-    public SegmentFactory(int size) {
-        this.size = size;
+    public SegmentFactory(int segmentSize) {
+        this.size = segmentSize;
         this.executor = new ThreadPoolExecutor(1, 1, Long.MAX_VALUE, TimeUnit.DAYS, new LinkedBlockingQueue<>(1), r -> {
             Thread thread = new Thread(r);
             thread.setName("segment-factory-thread");

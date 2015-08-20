@@ -1,12 +1,8 @@
 package org.crustee.raft.storage.write;
 
-import static java.lang.Long.MAX_VALUE;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.Memtable;
 import org.crustee.raft.storage.sstable.SSTableReader;
@@ -21,19 +17,13 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     private static final Logger logger = getLogger(MemtableHandler.class);
 
-    private ExecutorService flushMemtableExecutor = new ThreadPoolExecutor(1, 4, MAX_VALUE, TimeUnit.DAYS, new LinkedBlockingQueue<>(10),
-            r -> {
-                Thread thread = new Thread(r);
-                thread.setName("memtable-flush-thread");
-                thread.setUncaughtExceptionHandler((t, e) -> e.printStackTrace());
-                return thread;
-            });
-
     private Memtable memtable;
     private final CrusteeTable table;
+    private final ExecutorService flushMemtableExecutor;
 
-    public MemtableHandler(CrusteeTable table) {
+    public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor) {
         this.table = table;
+        this.flushMemtableExecutor = flushMemtableExecutor;
     }
 
     @Override
@@ -60,11 +50,11 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
         try (SSTableWriter ssTableWriter = new SSTableWriter(tablePath, indexPath, memtable)) {
             ssTableWriter.write();
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
         long end = System.currentTimeMillis();
         crusteeTable.memtableFlushed(memtable, new SSTableReader(tablePath, indexPath));
-        logger.info("flush memtable duration {}", (end - start) + " for sstable " + tablePath + " index " + indexPath);
+        logger.info("flush memtable duration {} for sstable {}, index {}", (end - start), tablePath, indexPath);
     }
 
     @Override
@@ -74,7 +64,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     private void newMemtable() {
         Memtable memtable = new LockFreeBTreeMemtable();
-        logger.info("created memtable " + System.identityHashCode(memtable));
+        logger.info("created memtable {}", System.identityHashCode(memtable));
         table.registerMemtable(memtable);
         this.memtable = memtable;
     }
