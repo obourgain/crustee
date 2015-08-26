@@ -79,9 +79,19 @@ public class CrusteeWriter {
 
         disruptor.shutdown();
 
+        try {
+            // let some time to flush
+            SECONDS.sleep(20);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
         logger.info("warming up reader");
         for (long l = 0; l < 100; l++) {
+            long s = System.currentTimeMillis();
             blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
+            long e = System.currentTimeMillis();
+            System.out.println((e - s) + " ms");
         }
         logger.info("done warming");
 
@@ -92,7 +102,7 @@ public class CrusteeWriter {
         }
 
         logger.info("start reading");
-        for (long l = 0; l < 100; l++) {
+        for (long l = 0; l < BENCH_COUNT; l++) {
             blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
         }
         logger.info("done reading");

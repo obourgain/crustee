@@ -10,20 +10,33 @@ import org.crustee.raft.utils.ByteBufferUtils;
 
 public class Serializer {
 
+    public static final int ENTRY_COUNT_SIZE = Integer.BYTES;
+    public static final int KEY_SIZE = Short.BYTES;
+    public static final int VALUE_SIZE = Integer.BYTES;
+
+    /**
+     * The size of a serialized row without counting the data in it (keys and values),
+     * so this is just the overhead of the metadata associated with the row
+     */
+    public static int serializedSizeOverhead(int entryCount) {
+        return ENTRY_COUNT_SIZE // entry count
+                + (KEY_SIZE + VALUE_SIZE) * entryCount;
+    }
+
     public static SerializedRow serialize(Row row) {
         Map<ByteBuffer, ByteBuffer> map = row.asMap();
         ByteBuffer[] buffers = new ByteBuffer[map.size() * 3 + 1];
-        buffers[0] = ByteBuffer.allocate(4).putInt(0, map.size());
+        buffers[0] = ByteBuffer.allocate(ENTRY_COUNT_SIZE).putInt(0, map.size());
 
         int i = 1;
         Set<Map.Entry<ByteBuffer, ByteBuffer>> entrySet = map.entrySet();
         for (Map.Entry<ByteBuffer, ByteBuffer> entry : entrySet) {
             assert entry.getKey().position() == 0;
             assert entry.getValue().position() == 0;
-            buffers[i++] = (ByteBuffer) ByteBuffer.allocate(Short.BYTES + Integer.BYTES)
+            buffers[i++] = (ByteBuffer) ByteBuffer.allocate(KEY_SIZE + VALUE_SIZE)
                     .putShort((short) entry.getKey().limit()) // key size
-                    .putInt(entry.getValue().limit())
-                    .flip(); // value size
+                    .putInt(entry.getValue().limit()) // value size
+                    .flip();
             // duplicate to avoid position/limit madness
             buffers[i++] = entry.getKey().duplicate();
             buffers[i++] = entry.getValue().duplicate();

@@ -2,13 +2,12 @@ package org.crustee.raft.storage.table;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
-import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
-import org.crustee.raft.storage.sstable.KVLocation;
 import org.crustee.raft.storage.sstable.SSTableReader;
 
 public class CrusteeTable {
@@ -51,13 +50,9 @@ public class CrusteeTable {
     private void searchInSSTables(ByteBuffer key, Iterator<SSTableReader> ssTablesIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
         while(ssTablesIterator.hasNext()) {
             SSTableReader ssTableReader = ssTablesIterator.next();
-            KVLocation location = ssTableReader.findKVLocalisation(key);
-            if(location.isFound()) {
-                Row row = ssTableReader.get(location);
-                assert row != null : "row found in index should be present in the table";
-                Map<ByteBuffer, ByteBuffer> map = row.asMap();
-                values.putAll(map);
-            }
+
+            Optional<Row> row = ssTableReader.get(key);
+            row.map(Row::asMap).ifPresent(values::putAll);
         }
     }
 

@@ -1,21 +1,19 @@
 package org.crustee.raft.storage.sstable;
 
 /**
- * Indicated where is located the value in the table file, based on data from the index.
+ * Indicate where located the row is located in the table file, based on data from the index.
  */
-public class KVLocation {
+public class RowLocation {
 
-    public static final KVLocation NOT_FOUND = new KVLocation((short) -1, -1, -1);
+    public static final RowLocation NOT_FOUND = new RowLocation((short) -1, -1, -1);
 
     private final short rowKeySize;
-    private final long rowKeyOffset;
-    private final long valueOffset;
+    private final long offset;
     private final int valueSize;
 
-    public KVLocation(short rowKeySize, long valueOffset, int valueSize) {
+    public RowLocation(short rowKeySize, long offset, int valueSize) {
         this.rowKeySize = rowKeySize;
-        this.rowKeyOffset = valueOffset - rowKeySize;
-        this.valueOffset = valueOffset;
+        this.offset = offset;
         this.valueSize = valueSize;
     }
 
@@ -24,11 +22,15 @@ public class KVLocation {
     }
 
     public long getRowKeyOffset() {
-        return rowKeyOffset;
+        return offset + 2 + 4; // keysize & value size
     }
 
     public long getValueOffset() {
-        return valueOffset;
+        return offset + 2 + 4 + rowKeySize; // keysize + value size + key
+    }
+
+    public long getOffset() {
+        return offset;
     }
 
     public int getValueSize() {
@@ -43,9 +45,8 @@ public class KVLocation {
     public String toString() {
         return "KVLocalisation{" +
                 "rowKeySize=" + rowKeySize +
-                ", rowKeyOffset=" + rowKeyOffset +
-                ", valueOffset=" + valueOffset +
                 ", valueSize=" + valueSize +
+                ", offset=" + offset +
                 '}';
     }
 }
