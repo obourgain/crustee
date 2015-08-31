@@ -52,6 +52,13 @@ public class SSTableWriter implements AutoCloseable {
         this.header = new SSTableHeader(memtable.getCount());
     }
 
+    public SSTableReader toReader() {
+        // it would be better with only CLOSED, but with SYNCED it is easier to use with
+        // try-with-resource
+        assert completedState == State.CLOSED | completedState == State.SYNCED;
+        return new SSTableReader(table, index);
+    }
+
     public void write() {
         writeTemporaryHeader();
         completedState = State.TEMPORAY_HEADER;

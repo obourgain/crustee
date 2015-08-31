@@ -1,10 +1,11 @@
 package org.crustee.raft.storage.sstable;
 
+import static java.lang.Long.MAX_VALUE;
 import static java.util.Collections.singletonMap;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.crustee.raft.storage.sstable.SSTableWriter.State.INDEX;
 import static org.crustee.raft.utils.UncheckedIOUtils.readAllToBuffer;
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -14,9 +15,7 @@ import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.junit.Assert;
 import org.junit.Ignore;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 
 public class SSTableWriterTest extends AbstractSSTableTest {
 

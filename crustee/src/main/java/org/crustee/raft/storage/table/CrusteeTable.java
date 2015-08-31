@@ -15,8 +15,8 @@ public class CrusteeTable {
     // memtable and sstables are sorted from older to most recent
     // so we can simply put relevant columns from every table to a map
     // and older values will be overwritten
-    private final CopyOnWriteArrayList<ReadOnlyMemtable> memtables = new CopyOnWriteArrayList<>();
-    private final CopyOnWriteArrayList<SSTableReader> ssTableReaders = new CopyOnWriteArrayList<>();
+    protected final CopyOnWriteArrayList<ReadOnlyMemtable> memtables = new CopyOnWriteArrayList<>();
+    protected final CopyOnWriteArrayList<SSTableReader> ssTableReaders = new CopyOnWriteArrayList<>();
 
     public SortedMap<ByteBuffer, ByteBuffer> get(ByteBuffer key) {
         // take the snapshots early to have the most possible view on the tables
@@ -31,29 +31,36 @@ public class CrusteeTable {
 
         TreeMap<ByteBuffer, ByteBuffer> values = new TreeMap<>();
 
-        searchInMemtables(key, memtableIterator, values);
+        // read first in sstables so we can easily overwrite with data from memtables
+        boolean foundInSSTables = searchInSSTables(key, ssTablesIterator, values);
 
-        searchInSSTables(key, ssTablesIterator, values);
-        return values;
+        boolean foundInMemtables = searchInMemtables(key, memtableIterator, values);
+        return foundInMemtables | foundInSSTables ? values : null;
     }
 
-    private void searchInMemtables(ByteBuffer key, Iterator<ReadOnlyMemtable> memtableIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+    private boolean searchInMemtables(ByteBuffer key, Iterator<ReadOnlyMemtable> memtableIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+        boolean entryFound = false;
         while(memtableIterator.hasNext()) {
             ReadOnlyMemtable memtable = memtableIterator.next();
             Row row = memtable.get(key);
             if(row != null) {
+                entryFound = true;
                 values.putAll(row.asMap());
             }
         }
+        return entryFound;
     }
 
-    private void searchInSSTables(ByteBuffer key, Iterator<SSTableReader> ssTablesIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+    private boolean searchInSSTables(ByteBuffer key, Iterator<SSTableReader> ssTablesIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+        boolean entryFound = false;
         while(ssTablesIterator.hasNext()) {
             SSTableReader ssTableReader = ssTablesIterator.next();
 
             Optional<Row> row = ssTableReader.get(key);
             row.map(Row::asMap).ifPresent(values::putAll);
+            entryFound |= row.isPresent();
         }
+        return entryFound;
     }
 
     public void registerMemtable(ReadOnlyMemtable memtable) {

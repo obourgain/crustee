@@ -10,7 +10,5 @@ public interface WritableMemtable extends ReadOnlyMemtable {
      */
     void insert(ByteBuffer rowKey, Map<ByteBuffer, ByteBuffer> values);
 
-    long getEstimatedSizeInBytes();
-
     ReadOnlyMemtable freeze();
 }

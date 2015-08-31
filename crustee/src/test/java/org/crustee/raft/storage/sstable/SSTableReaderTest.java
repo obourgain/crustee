@@ -18,7 +18,6 @@ public class SSTableReaderTest extends AbstractSSTableTest {
     static final short COLUMN_KEY_SIZE = 16;
     static final int VALUE_SIZE = 100;
 
-
     @Test
     public void should_find_value_offset() throws IOException {
         WritableMemtable memtable = createMemtable(3);
@@ -26,14 +25,15 @@ public class SSTableReaderTest extends AbstractSSTableTest {
         test(memtable, this::initSstable,
                 (writer, table, index) -> {
 
-                    SSTableReader reader = new SSTableReader(table.toPath(), index.toPath());
+                    try(SSTableReader reader = new SSTableReader(table.toPath(), index.toPath())) {
 
-                    ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 1);
-                    Optional<Row> value = reader.get(key);
-                    Assertions.assertThat(value).isPresent();
-                    assertThat(value.get().asMap()).isEqualTo(singletonMap(
-                            ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, 1),
-                            ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1)));
+                        ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 1);
+                        Optional<Row> value = reader.get(key);
+                        Assertions.assertThat(value).isPresent();
+                        assertThat(value.get().asMap()).isEqualTo(singletonMap(
+                                ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, 1),
+                                ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1)));
+                    }
                 });
     }
 
