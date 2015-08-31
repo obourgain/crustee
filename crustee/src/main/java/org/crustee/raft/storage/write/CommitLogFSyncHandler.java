@@ -23,15 +23,20 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
         eventCount++;
         unsyncedSizeInBytes += event.getRowKey().limit(); // + event.getValues().limit(); TODO log the value
+        syncOldSegments();
+        syncCurrentIfNeeded(endOfBatch);
+    }
+
+    private void syncCurrentIfNeeded(boolean endOfBatch) {
+        if (endOfBatch || eventCount >= maxEvents || unsyncedSizeInBytes >= maxUnsyncedSizeInBytes || eventCount >= maxUnsyncedCount) {
+            commitLog.syncCurrent();
+        }
+    }
+
+    private void syncOldSegments() {
         Segment old;
-        // sync all old commit logs
         while ((old = commitLog.getOldSegments().poll()) != null) {
             old.sync();
-        }
-        if(endOfBatch || eventCount >= maxUnsyncedCount || unsyncedSizeInBytes >= maxUnsyncedSizeInBytes) {
-            commitLog.getCurrent().sync();
-            eventCount = 0;
-            unsyncedSizeInBytes = 0;
         }
     }
 

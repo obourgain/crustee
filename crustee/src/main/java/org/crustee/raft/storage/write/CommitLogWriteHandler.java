@@ -4,6 +4,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.crustee.raft.storage.commitlog.CommitLog;
+import org.crustee.raft.storage.commitlog.Segment;
 import org.slf4j.Logger;
 import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.LifecycleAware;
@@ -36,15 +37,26 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
         // it is safe to buffer stuff because we won't publish the next sequence and thus allow
         // the next consumer to catch up until we receive a endOfBatch = true
         if (endOfBatch || nextBufferIndex >= maxEvents || sizeInBytes >= maxSizeInBytes) {
-            commitLog.write(buffered, nextBufferIndex);
-            Arrays.fill(buffered, null);
-            nextBufferIndex = 0;
-            sizeInBytes = 0;
+            flushBuffer(event);
         }
 
         if (sequence % 10_000_000 == 0) {
             logger.info("journaled event {}", sequence);
         }
+    }
+
+    private void flushBuffer(WriteEvent event) {
+        // newSegment is null except when the segment changed
+        Segment newSegment = commitLog.write(buffered, nextBufferIndex);
+        if(newSegment != null) {
+            // avoid writing null in most cases, decreasing memory traffic is probably better than removing a correctly predicted branch
+            // TODO microbench it !
+            event.setSegment(newSegment);
+        }
+
+        Arrays.fill(buffered, null);
+        nextBufferIndex = 0;
+        sizeInBytes = 0;
     }
 
     @Override

@@ -4,6 +4,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.UUID;
+import org.crustee.raft.utils.ByteBufferUtils;
 import org.slf4j.Logger;
 
 public class MmapSegment implements Segment {
@@ -71,6 +72,7 @@ public class MmapSegment implements Segment {
     public void close() {
         // TODO try to call the cleaner ?
         closed = true;
+        ByteBufferUtils.tryUnmap(mappedFile);
     }
 
     @Override

@@ -25,7 +25,7 @@ public class CrusteeWriter {
 
     private static final Logger logger = getLogger(CrusteeWriter.class);
 
-    public static final int BENCH_COUNT = 10 * 1000 * 1000;
+    public static final int BENCH_COUNT = 20 * 1000 * 1000;
     public static final int WARMUP_COUNT = 100_000;
     public static final int KEY_SIZE = 16;
     public static final int VAlUE_SIZE = 200;
@@ -35,7 +35,13 @@ public class CrusteeWriter {
     public static void main(String[] args) throws InterruptedException {
         CommitLog commitLog = new CommitLog(new SegmentFactory(128*1024*1024));
 
-        Executor executor = Executors.newCachedThreadPool();
+        Executor executor = Executors.newCachedThreadPool(r -> {
+            Thread thread = new Thread(r);
+            thread.setUncaughtExceptionHandler((t, e) -> {
+                logger.error("", e);
+            });
+            return thread;
+        });
 
         WriteEventFactory factory = new WriteEventFactory();
 

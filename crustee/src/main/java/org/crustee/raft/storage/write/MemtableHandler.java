@@ -2,7 +2,10 @@ package org.crustee.raft.storage.write;
 
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
+import org.crustee.raft.storage.commitlog.Segment;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
@@ -17,6 +20,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
 
     private static final Logger logger = getLogger(MemtableHandler.class);
 
+    private List<Segment> segments;
     private WritableMemtable memtable;
     private final CrusteeTable table;
     private final ExecutorService flushMemtableExecutor;
@@ -25,6 +29,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor, int maxEvents) {
         this.table = table;
         this.flushMemtableExecutor = flushMemtableExecutor;
+        this.segments = new ArrayList<>();
         this.maxEvents = maxEvents;
     }
 
@@ -32,16 +37,28 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
         assert event.getRowKey().position() == 0 : "Event's key position is not 0 " + event.getRowKey().position();
         memtable.insert(event.getRowKey(), event.getValues());
+        if (event.getSegment() != null) {
+            segments.add(event.getSegment());
+        }
         if (memtable.getCount() >= maxEvents) {
-            logger.info("flushing memtable");
-            ReadOnlyMemtable oldMemtable = memtable.freeze();
-            flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table));
-            newMemtable();
-            logger.info("created memtable");
+            flushMemtable();
         }
     }
 
-    private void writeSSTable(ReadOnlyMemtable memtable, CrusteeTable crusteeTable) {
+    private void flushMemtable() {
+        logger.info("flushing memtable");
+        memtable.freeze();
+        ReadOnlyMemtable oldMemtable = memtable;
+        Segment currentsegment = this.segments.get(this.segments.size() - 1);
+        List<Segment> segmentsToClose = this.segments.subList(0, this.segments.size() - 1);
+        flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table, segmentsToClose));
+        newMemtable();
+        this.segments = new ArrayList<>();
+        this.segments.add(currentsegment);
+        logger.info("created memtable");
+    }
+
+    private void writeSSTable(ReadOnlyMemtable memtable, CrusteeTable crusteeTable, List<Segment> segmentsToClose) {
         long start = System.currentTimeMillis();
         Path tablePath = UncheckedIOUtils.tempFile();
         Path indexPath = UncheckedIOUtils.tempFile();
@@ -52,6 +69,8 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
             logger.info("flush memtable duration {} for sstable {}, index {}", (end - start), tablePath, indexPath);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            segmentsToClose.forEach(Segment::close);
         }
     }
 

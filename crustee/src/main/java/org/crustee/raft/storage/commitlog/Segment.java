@@ -20,4 +20,8 @@ public interface Segment extends AutoCloseable {
 
     UUID getUuid();
 
+    // do not throw exception
+    @Override
+    void close();
+
 }

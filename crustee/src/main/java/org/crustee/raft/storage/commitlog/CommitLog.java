@@ -25,17 +25,7 @@ public class CommitLog {
         this.next = segmentFactory.newSegment();
     }
 
-    public void write(ByteBuffer buffer, int length) {
-        checkOwnerThread();
-        if(!current.canWrite(length)) {
-            oldSegments.add(current);
-            current = UncheckedFutureUtils.get(next);
-            next = segmentFactory.newSegment();
-        }
-        current.append(buffer, length);
-    }
-
-    public void write(ByteBuffer[] buffers, int length) {
+    public Segment write(ByteBuffer[] buffers, int length) {
         checkOwnerThread();
         int sizeInBytes = buffersSize(buffers, length);
         // TODO write as much a possible in the current log
@@ -43,8 +33,12 @@ public class CommitLog {
             oldSegments.add(current);
             current = UncheckedFutureUtils.get(next);
             next = segmentFactory.newSegment();
+            current.append(buffers, length);
+            return current;
+        } else {
+            current.append(buffers, length);
+            return null;
         }
-        current.append(buffers, length);
     }
 
     protected static int buffersSize(ByteBuffer[] buffers, int length) {
@@ -66,11 +60,11 @@ public class CommitLog {
         owner = new WeakReference<>(Thread.currentThread());
     }
 
-    public Segment getCurrent() {
-        return current;
-    }
-
     public Queue<Segment> getOldSegments() {
         return oldSegments;
+    }
+
+    public void syncCurrent() {
+        current.sync();
     }
 }
