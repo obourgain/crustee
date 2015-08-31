@@ -165,14 +165,6 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static MappedByteBuffer mapReadOnly(Path path) {
-        try(FileChannel channel = FileChannel.open(path, READ)) {
-            return (MappedByteBuffer) channel.map(READ_ONLY, 0, channel.size()).asReadOnlyBuffer();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
     public static void delete(Path path) {
         try {
             Files.delete(path);

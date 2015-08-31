@@ -114,7 +114,11 @@ public class ByteBufferUtils {
         }
         try {
             Cleaner cleaner = ((DirectBuffer) byteBuffer).cleaner();
-            cleaner.clean();
+            if(cleaner != null) {
+                cleaner.clean();
+            } else {
+                logger.info("No cleaner for {}", byteBuffer.getClass());
+            }
             return true;
         } catch (Throwable throwable) {
             logger.warn("An error occurred during DirectByteBuffer cleaning", throwable.getMessage());
