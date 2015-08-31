@@ -67,11 +67,11 @@ public class MmapIndexReader implements IndexReader {
 
     @Override
     protected void finalize() throws Throwable {
-        super.finalize();
         if (!closed) {
             logger.warn("Index was not closed before finalization");
             close();
         }
+        super.finalize();
     }
 
 }

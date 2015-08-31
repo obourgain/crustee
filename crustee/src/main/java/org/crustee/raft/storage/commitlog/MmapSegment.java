@@ -75,10 +75,10 @@ public class MmapSegment implements Segment {
 
     @Override
     protected void finalize() throws Throwable {
-        super.finalize();
         if (!closed) {
             logger.warn("Segment was not closed before finalization");
             close();
         }
+        super.finalize();
     }
 }

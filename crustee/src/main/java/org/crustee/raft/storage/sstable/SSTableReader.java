@@ -43,11 +43,11 @@ public class SSTableReader implements AutoCloseable {
 
     @Override
     protected void finalize() throws Throwable {
-        super.finalize();
         if (closed) {
             logger.warn("an SSTableWriter have not been closed, this may cause a resource leak");
             close();
         }
+        super.finalize();
     }
 
     public Optional<Row> get(ByteBuffer key) {

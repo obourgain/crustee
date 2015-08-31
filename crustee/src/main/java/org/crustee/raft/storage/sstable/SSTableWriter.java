@@ -184,11 +184,11 @@ public class SSTableWriter implements AutoCloseable {
 
     @Override
     protected void finalize() throws Throwable {
-        super.finalize();
         if (completedState != State.CLOSED) {
             logger.warn("an SSTableWriter have not been correctly closed");
             close();
         }
+        super.finalize();
     }
 
     protected enum State {
