@@ -93,7 +93,14 @@ public class SSTableWriter implements AutoCloseable {
         memtable.applyInOrder((k, v) -> writeTableEntry((ByteBuffer) k, v));
     }
 
-    private void writeTableEntry(ByteBuffer key, Row value) {
+    /**
+     * Table entry on disk format is :
+     * 2 bytes for the row key size (n)
+     * 4 bytes for the entry size (m)
+     * n bytes for the key
+     * m bytes for the value
+     */
+    protected void writeTableEntry(ByteBuffer key, Row value) {
         assert key.limit() <= Short.MAX_VALUE;
         assert key.position() == 0;
 
@@ -113,10 +120,9 @@ public class SSTableWriter implements AutoCloseable {
 
         UncheckedIOUtils.write(tableChannel, buffers);
 
-        offset += keyValueLengthBuffer.limit() + key.limit();
         valuesOffsets.add(offset);
+        offset += keyValueLengthBuffer.limit() + key.limit() + totalSize;
         entriesSize.add(totalSize);
-        offset += totalSize;
     }
 
     private ByteBuffer[] concat(ByteBuffer keyValueLengthBuffer, ByteBuffer rowKey, ByteBuffer[] buffers) {
@@ -137,10 +143,17 @@ public class SSTableWriter implements AutoCloseable {
             assert sizes.hasNext();
             long nextOffset = offsets.next().value;
             int nextEntrySize = sizes.next().value;
-            writeIndexEntry((ByteBuffer) k, keySizeOffsetAndValueSize, nextOffset, nextEntrySize);
+            writeIndexEntry(k, keySizeOffsetAndValueSize, nextOffset, nextEntrySize);
         });
     }
 
+    /**
+     * Index entry on disk format is :
+     * 2 bytes for the row key size (n)
+     * 8 bytes for the offset at which the target row starts in the table file
+     * 4 bytes for the value size
+     * n bytes for the row key
+     */
     private void writeIndexEntry(ByteBuffer key, ByteBuffer keySizeOffsetAndValueSize, long nextOffset, int serializedValueSize) {
         assert key.limit() <= Short.MAX_VALUE;
         keySizeOffsetAndValueSize.clear();

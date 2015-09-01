@@ -33,6 +33,7 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
     public void insert(ByteBuffer rowKey, Map<ByteBuffer, ByteBuffer> values) {
         assert rowKey.position() == 0;
         assert areAtPosition0(values);
+        assert rowKey.limit() <= Short.MAX_VALUE : "row key must not be larger than " + Short.MAX_VALUE + " bytes";
 
         LockFreeBTree.UpdateAction<Row> updateAction = new UpdateRow(rowKey, values);
         bTree.insert(rowKey, updateAction);

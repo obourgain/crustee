@@ -1,11 +1,14 @@
 package org.crustee.raft.utils;
 
+import static java.nio.channels.FileChannel.MapMode.READ_ONLY;
+import static java.nio.file.StandardOpenOption.READ;
+import java.io.Closeable;
 import java.io.Flushable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channel;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ReadableByteChannel;
@@ -14,7 +17,7 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.Paths;
 
 public class UncheckedIOUtils {
 
@@ -74,9 +77,9 @@ public class UncheckedIOUtils {
         }
     }
 
-    public static void close(Channel channel) {
+    public static void close(Closeable closeable) {
         try {
-            channel.close();
+            closeable.close();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -91,7 +94,7 @@ public class UncheckedIOUtils {
     }
 
     public static void fsyncDir(Path path) {
-        try (FileChannel channel = openChannel(path, StandardOpenOption.READ)) {
+        try (FileChannel channel = openChannel(path, READ)) {
             channel.force(true);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -124,7 +127,7 @@ public class UncheckedIOUtils {
 
     public static Path tempFile() {
         try {
-            return Files.createTempFile(null, null);
+            return Files.createTempFile(Paths.get("/tmp/crustee/"), null, null);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -154,4 +157,27 @@ public class UncheckedIOUtils {
         }
     }
 
+    public static MappedByteBuffer map(Path path) {
+        try(FileChannel channel = FileChannel.open(path, READ)) {
+            return channel.map(READ_ONLY, 0, channel.size());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static MappedByteBuffer mapReadOnly(Path path) {
+        try(FileChannel channel = FileChannel.open(path, READ)) {
+            return (MappedByteBuffer) channel.map(READ_ONLY, 0, channel.size()).asReadOnlyBuffer();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static void delete(Path path) {
+        try {
+            Files.delete(path);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 }

@@ -64,6 +64,8 @@ public class SSTableConsistencyChecker {
         ByteBuffer tableEntryMetadata = buffers.tableEntryMetadata();
         ByteBuffer indexEntryMetadata = buffers.indexEntryMetadata();
 
+        long currentValueOffset = position(tableChannel);
+
         UncheckedIOUtils.read(tableChannel, tableEntryMetadata);
         UncheckedIOUtils.read(indexChannel, indexEntryMetadata);
 
@@ -74,6 +76,7 @@ public class SSTableConsistencyChecker {
         short indexKeySize = indexEntryMetadata.getShort();
         long offset = indexEntryMetadata.getLong();
         int indexValueSize = indexEntryMetadata.getInt();
+        verify(() -> currentValueOffset == offset, () -> format("at entry %s, index offset and table position are different: table %s , index %s ", entryIndex, currentValueOffset, offset));
 
         verify(() -> tableKeySize == indexKeySize, () -> format("at entry %s, keys do not have the same length in table and index: %s / %s", entryIndex, tableKeySize, indexKeySize));
         verify(() -> tableValueSize == indexValueSize, () -> format("at entry %s, columns do not have the same length in table and index: %s / %s", entryIndex, tableKeySize, indexKeySize));
@@ -83,12 +86,10 @@ public class SSTableConsistencyChecker {
         ByteBuffer indexKeyBuffer = buffers.indexKeyBuffer(indexKeySize);
 
         UncheckedIOUtils.read(tableChannel, tableKeyBuffer);
-        long currentValueOffset = position(tableChannel);
         UncheckedIOUtils.read(tableChannel, valueBuffer);
         UncheckedIOUtils.read(indexChannel, indexKeyBuffer);
 
         verify(() -> Objects.equals(tableKeyBuffer.rewind(), indexKeyBuffer.rewind()), () -> format("at entry %s, key buffers doesn't have the same content: table %s , index %s ", entryIndex, toHexString(tableKeyBuffer), toHexString(indexKeyBuffer)));
-        verify(() -> currentValueOffset == offset, () -> format("at entry %s, index offset and table position are different: table %s , index %s ", entryIndex, currentValueOffset, offset));
     }
 
     private void verify(BooleanSupplier check, Supplier<String> message) {
