@@ -37,7 +37,7 @@ public class SSTableConsistencyChecker {
     private SSTableHeader checkHeader(FileChannel tableChannel) {
         ByteBuffer buffer = ByteBuffer.allocate(SSTableHeader.BUFFER_SIZE);
         UncheckedIOUtils.read(tableChannel, buffer);
-        SSTableHeader header = SSTableHeader.fromBuffer(buffer);
+        SSTableHeader header = SSTableHeader.fromBuffer((ByteBuffer) buffer.flip());
         verify(() -> header.getEntryCount() >= 0, () -> format("header entry count is negative %s", header.getEntryCount()));
         long tableFileSize = size(tableChannel);
         verify(() -> header.getSize() == tableFileSize, () -> format("size recorded in header %s is different from file size %s ", header.getSize(), tableFileSize));

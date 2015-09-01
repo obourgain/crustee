@@ -1,8 +1,6 @@
 package org.crustee.raft.storage.sstable;
 
-import static java.lang.Long.MAX_VALUE;
 import static java.util.Collections.singletonMap;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.crustee.raft.storage.sstable.SSTableWriter.State.INDEX;
 import static org.crustee.raft.utils.UncheckedIOUtils.readAllToBuffer;
@@ -103,7 +101,7 @@ public class SSTableWriterTest extends AbstractSSTableTest {
     }
 
     private WritableMemtable createMemtable(int entries) {
-        WritableMemtable memtable = new LockFreeBTreeMemtable();
+        WritableMemtable memtable = new LockFreeBTreeMemtable(1L);
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i).putInt(4, i),
                         singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),

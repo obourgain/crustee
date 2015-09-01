@@ -127,7 +127,7 @@ public class UncheckedIOUtils {
 
     public static Path tempFile() {
         try {
-            return Files.createTempFile(Paths.get("/tmp/crustee/"), null, null);
+            return Files.createTempFile(Paths.get("/tmp/"), null, null);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -149,6 +149,9 @@ public class UncheckedIOUtils {
         }
     }
 
+    /**
+     * Return a buffer ready to read.
+     */
     public static ByteBuffer readAllToBuffer(Path path) {
         try {
             return ByteBuffer.wrap(Files.readAllBytes(path));

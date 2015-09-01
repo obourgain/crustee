@@ -1,33 +1,25 @@
 package org.crustee.raft.storage.table;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.storage.sstable.SSTableReader;
 
 public class CrusteeTable {
 
-    // memtable and sstables are sorted from older to most recent
-    // so we can simply put relevant columns from every table to a map
-    // and older values will be overwritten
-    protected final CopyOnWriteArrayList<ReadOnlyMemtable> memtables = new CopyOnWriteArrayList<>();
-    protected final CopyOnWriteArrayList<SSTableReader> ssTableReaders = new CopyOnWriteArrayList<>();
+    protected volatile Tables tables = new Tables();
 
     public SortedMap<ByteBuffer, ByteBuffer> get(ByteBuffer key) {
-        // take the snapshots early to have the most possible view on the tables
-        // there is a quite benign race here, if a memtable is flushed and the corresponding sstable is
-        // added between the two lines, we may end up searching in both the memtable and sstable
-        // corresponding to the same data
-        // We could assign a UUID to each memtable and sstable and deduplicate based rads with a set, but before adding this
-        // we should evaluate and try to measure the real probability of seeing this double read, and
-        // what is the real performance impact
-        Iterator<ReadOnlyMemtable> memtableIterator = memtables.iterator();
-        Iterator<SSTableReader> ssTablesIterator = ssTableReaders.iterator();
+        // capture current state
+        Tables localTables = this.tables;
+        Iterator<ReadOnlyMemtable> memtableIterator = localTables.memtables.iterator();
+        Iterator<SSTableReader> ssTablesIterator = localTables.ssTableReaders.iterator();
 
         TreeMap<ByteBuffer, ByteBuffer> values = new TreeMap<>();
 
@@ -63,14 +55,53 @@ public class CrusteeTable {
         return entryFound;
     }
 
-    public void registerMemtable(ReadOnlyMemtable memtable) {
-        memtables.add(memtable);
+    public synchronized void registerMemtable(ReadOnlyMemtable memtable) {
+        this.tables = this.tables.with(memtable);
     }
 
-    public void memtableFlushed(ReadOnlyMemtable memtable, SSTableReader ssTableReader) {
-        // add the new sstable before removing the memtable to avoid having a window where the data may not be found
-        ssTableReaders.add(ssTableReader);
-        memtables.remove(memtable);
+    public synchronized void memtableFlushed(ReadOnlyMemtable memtable, SSTableReader ssTableReader) {
+        this.tables = this.tables.memtableFlushed(memtable, ssTableReader);
+    }
+
+    protected static class Tables {
+
+        protected final List<ReadOnlyMemtable> memtables;
+        protected final List<SSTableReader> ssTableReaders;
+
+        private Tables(List<ReadOnlyMemtable> memtables, List<SSTableReader> ssTableReaders) {
+            this.memtables = memtables;
+            this.ssTableReaders = ssTableReaders;
+        }
+
+        private Tables() {
+            this.memtables = new ArrayList<>();
+            this.ssTableReaders = new ArrayList<>();
+        }
+
+        Tables with(ReadOnlyMemtable newMemtable) {
+            List<ReadOnlyMemtable> newMemtables = new ArrayList<>(this.memtables);
+            newMemtables.add(newMemtable);
+            newMemtables.sort(Timestamped.TIMESTAMPED_COMPARATOR);
+            return new Tables(newMemtables, this.ssTableReaders);
+        }
+
+        Tables memtableFlushed(ReadOnlyMemtable memtable, SSTableReader newReader) {
+            List<SSTableReader> newReaders = new ArrayList<>(this.ssTableReaders);
+            newReaders.add(newReader);
+            newReaders.sort(Timestamped.TIMESTAMPED_COMPARATOR);
+            List<ReadOnlyMemtable> newMemtables = new ArrayList<>(this.memtables);
+            newMemtables.remove(memtable);
+            newMemtables.sort(Timestamped.TIMESTAMPED_COMPARATOR);
+            return new Tables(newMemtables, newReaders);
+        }
+
+        @Override
+        public String toString() {
+            return "Tables{" +
+                    "memtables=" + memtables +
+                    ", ssTableReaders=" + ssTableReaders +
+                    '}';
+        }
     }
 
 }

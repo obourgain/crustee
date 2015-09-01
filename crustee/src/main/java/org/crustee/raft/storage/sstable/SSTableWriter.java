@@ -49,7 +49,7 @@ public class SSTableWriter implements AutoCloseable {
         this.tableChannel = openChannel(table, WRITE);
         this.indexChannel = openChannel(index, WRITE);
 
-        this.header = new SSTableHeader(memtable.getCount());
+        this.header = new SSTableHeader(memtable.getCount(), memtable.getCreationTimestamp());
     }
 
     public SSTableReader toReader() {

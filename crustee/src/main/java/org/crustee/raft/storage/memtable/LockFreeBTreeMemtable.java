@@ -14,6 +14,12 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
 
     private volatile long estimatedSizeInBytes = 0;
 
+    private final long creationTimestamp;
+
+    public LockFreeBTreeMemtable(long creationTimestamp) {
+        this.creationTimestamp = creationTimestamp;
+    }
+
     @Override
     public void applyInOrder(BiConsumer<ByteBuffer, Row> action) {
         bTree.applyInOrder(action);
@@ -42,6 +48,11 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
     @Override
     public long getEstimatedSizeInBytes() {
         return estimatedSizeInBytes;
+    }
+
+    @Override
+    public long getCreationTimestamp() {
+        return creationTimestamp;
     }
 
     @Override

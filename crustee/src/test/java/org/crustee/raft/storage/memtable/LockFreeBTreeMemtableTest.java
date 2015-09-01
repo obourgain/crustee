@@ -10,7 +10,7 @@ public class LockFreeBTreeMemtableTest {
 
     @Test
     public void should_insert() throws Exception {
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         memtable.insert(allocate(42), singletonMap(allocate(43), allocate(1024)));
 
         assertThat(memtable.get(allocate(42)).asMap()).isEqualTo(singletonMap(allocate(43), allocate(1024)));
@@ -18,7 +18,7 @@ public class LockFreeBTreeMemtableTest {
 
     @Test
     public void should_merge() throws Exception {
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         memtable.insert(allocate(42), singletonMap(allocate(1), allocate(1024)));
         memtable.insert(allocate(42), singletonMap(allocate(2), allocate(2048)));
 
@@ -32,7 +32,7 @@ public class LockFreeBTreeMemtableTest {
 
     @Test
     public void should_overwritten_in_value() throws Exception {
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         memtable.insert(allocate(42), singletonMap(allocate(1), allocate(1024)));
         memtable.insert(allocate(42), singletonMap(allocate(1), allocate(2048)));
 

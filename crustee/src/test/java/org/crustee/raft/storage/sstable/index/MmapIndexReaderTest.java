@@ -74,11 +74,11 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
     public void should_return_not_found() throws Exception {
         test(memtable(), this::initSstable,
                 (writer, table, index) -> {
-                    IndexReader reader = IndexReaderFactory.create(index.toPath());
-                    ByteBuffer searchedKey = ByteBuffer.allocate(4).putShort(0, Short.MAX_VALUE);
-                    RowLocation rowLocation = reader.findRowLocation(searchedKey);
-                    Assertions.assertThat(rowLocation.isFound()).isFalse();
-
+                    try(IndexReader reader = IndexReaderFactory.create(index.toPath())) {
+                        ByteBuffer searchedKey = ByteBuffer.allocate(4).putShort(0, Short.MAX_VALUE);
+                        RowLocation rowLocation = reader.findRowLocation(searchedKey);
+                        Assertions.assertThat(rowLocation.isFound()).isFalse();
+                    }
                 }
         );
     }
@@ -100,7 +100,7 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
     }
 
     private WritableMemtable memtable() {
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         IntStream.range(0, 100)
                 .forEach(i ->
                         memtable.insert(ByteBuffer.allocate(4).putShort(0, (short) i),
