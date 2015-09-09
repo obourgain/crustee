@@ -63,7 +63,11 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     }
 
     private void newMemtable() {
-        WritableMemtable memtable = new LockFreeBTreeMemtable();
+        // TODO OBO create a synchronized clock
+        // it is safe to call currentTimeMillis as long a we have :
+        // - only one instance generating it
+        // - no more than one call per millis (or more, depending on the timer granularity
+        WritableMemtable memtable = new LockFreeBTreeMemtable(System.currentTimeMillis());
         logger.info("created memtable " + System.identityHashCode(memtable));
         table.registerMemtable(memtable);
         this.memtable = memtable;

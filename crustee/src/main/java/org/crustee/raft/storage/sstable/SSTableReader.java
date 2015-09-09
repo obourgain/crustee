@@ -10,11 +10,12 @@ import java.util.Optional;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.storage.sstable.index.IndexReader;
 import org.crustee.raft.storage.sstable.index.IndexReaderFactory;
+import org.crustee.raft.storage.table.Timestamped;
 import org.crustee.raft.utils.CloseableUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 
-public class SSTableReader implements AutoCloseable {
+public class SSTableReader implements AutoCloseable, Timestamped {
 
     private static final Logger logger = getLogger(SSTableReader.class);
 
@@ -31,7 +32,7 @@ public class SSTableReader implements AutoCloseable {
 
         ByteBuffer buffer = ByteBuffer.allocate(SSTableHeader.BUFFER_SIZE);
         UncheckedIOUtils.read(tableChannel, buffer);
-        this.header = SSTableHeader.fromBuffer(buffer);
+        this.header = SSTableHeader.fromBuffer((ByteBuffer) buffer.flip());
     }
 
     public void close() {
@@ -60,5 +61,10 @@ public class SSTableReader implements AutoCloseable {
         } else {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public long getCreationTimestamp() {
+        return header.getCreationTimestamp();
     }
 }

@@ -23,7 +23,7 @@ public class CrusteeTableTest {
     @Test
     public void should_find_in_memtable() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         ByteBuffer key = ByteBuffer.allocate(4);
         memtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         table.registerMemtable(memtable);
@@ -37,8 +37,8 @@ public class CrusteeTableTest {
     @Test
     public void should_merge_from_memtables() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable();
-        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable(1L);
+        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable(2L);
         ByteBuffer key = ByteBuffer.allocate(4);
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(12), ByteBuffer.allocate(16)));
@@ -59,7 +59,7 @@ public class CrusteeTableTest {
     @Test
     public void should_find_in_sstable() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         ByteBuffer key = ByteBuffer.allocate(4);
         memtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         table.registerMemtable(memtable);
@@ -75,7 +75,7 @@ public class CrusteeTableTest {
     @Test
     public void should_merge_from_sstables() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable(1L);
         ByteBuffer key = ByteBuffer.allocate(4);
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(12), ByteBuffer.allocate(16)));
@@ -83,7 +83,7 @@ public class CrusteeTableTest {
         SSTableReader olderReader = flushMemtable(olderMemtable);
         table.memtableFlushed(olderMemtable, olderReader);
 
-        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable(2L);
         newerMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(32)));
         table.registerMemtable(newerMemtable);
         SSTableReader newerReader = flushMemtable(newerMemtable);
@@ -100,7 +100,7 @@ public class CrusteeTableTest {
     @Test
     public void should_merge_from_sstables_and_memtable() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable(1L);
         ByteBuffer key = ByteBuffer.allocate(4);
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(12), ByteBuffer.allocate(16)));
@@ -108,7 +108,7 @@ public class CrusteeTableTest {
         SSTableReader olderReader = flushMemtable(olderMemtable);
         table.memtableFlushed(olderMemtable, olderReader);
 
-        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable(1L);
         newerMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(32)));
         table.registerMemtable(newerMemtable);
 
@@ -130,20 +130,42 @@ public class CrusteeTableTest {
     @Test
     public void should_replace_memtable_with_sstable() throws Exception {
         CrusteeTable table = new CrusteeTable();
-        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
         ByteBuffer key = ByteBuffer.allocate(4);
         memtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
         table.registerMemtable(memtable);
 
-        LockFreeBTreeMemtable otherMemtable = new LockFreeBTreeMemtable();
+        LockFreeBTreeMemtable otherMemtable = new LockFreeBTreeMemtable(2L);
         table.registerMemtable(otherMemtable);
 
-        assertThat(table.memtables).hasSize(2).containsExactly(memtable, otherMemtable);
+        assertThat(table.tables.memtables).hasSize(2).containsExactly(memtable, otherMemtable);
 
         flushMemtableAndTest(table, memtable, reader -> {
-            assertThat(table.memtables).containsOnly(otherMemtable);
-            assertThat(table.ssTableReaders).hasSize(1);
+            assertThat(table.tables.memtables).containsOnly(otherMemtable);
+            assertThat(table.tables.ssTableReaders).hasSize(1);
         });
+    }
+
+    @Test
+    public void should_reorder_tables_by_timestamp_when_flushed_in_disorder() throws Exception {
+        CrusteeTable table = new CrusteeTable();
+        LockFreeBTreeMemtable olderMemtable = new LockFreeBTreeMemtable(1L);
+        ByteBuffer key = ByteBuffer.allocate(4);
+        olderMemtable.insert(key, singletonMap(ByteBuffer.allocate(8), ByteBuffer.allocate(16)));
+        table.registerMemtable(olderMemtable);
+
+        LockFreeBTreeMemtable newerMemtable = new LockFreeBTreeMemtable(2L);
+        table.registerMemtable(newerMemtable);
+
+        assertThat(table.tables.memtables).hasSize(2).containsExactly(olderMemtable, newerMemtable);
+
+        // flush the newer before the older -> timestamp inversion
+        table.memtableFlushed(newerMemtable, flushMemtable(newerMemtable));
+        table.memtableFlushed(olderMemtable, flushMemtable(olderMemtable));
+
+        assertThat(table.tables.ssTableReaders).hasSize(2);
+        assertThat(table.tables.ssTableReaders.get(0).getCreationTimestamp()).isEqualTo(olderMemtable.getCreationTimestamp());
+        assertThat(table.tables.ssTableReaders.get(1).getCreationTimestamp()).isEqualTo(newerMemtable.getCreationTimestamp());
     }
 
     private SSTableReader flushMemtable(LockFreeBTreeMemtable memtable) throws IOException {

@@ -38,7 +38,7 @@ public class SSTableReaderTest extends AbstractSSTableTest {
     }
 
     private WritableMemtable createMemtable(int entries) {
-        WritableMemtable memtable = new LockFreeBTreeMemtable();
+        WritableMemtable memtable = new LockFreeBTreeMemtable(1L);
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i),
                         singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
