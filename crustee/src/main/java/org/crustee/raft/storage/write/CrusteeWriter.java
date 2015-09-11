@@ -101,8 +101,9 @@ public class CrusteeWriter {
             throw new RuntimeException(e);
         }
 
-        logger.info("start reading");
-        for (long l = 0; l < BENCH_COUNT; l++) {
+        int i = BENCH_COUNT / 100;
+        logger.info("start reading {} ", i);
+        for (long l = 0; l < i; l++) {
             blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
         }
         logger.info("done reading");
@@ -125,10 +126,10 @@ public class CrusteeWriter {
     }
 
     private static int randomKeySize() {
-//        double random = Math.random();
-//        int result = (int) (8 * random) - 4 + KEY_SIZE;
-//        return result;
-        return KEY_SIZE;
+        double random = Math.random();
+        int result = (int) (8 * random) - 4 + KEY_SIZE;
+        return result;
+//        return KEY_SIZE;
     }
 
     private static int randomValueSize() {

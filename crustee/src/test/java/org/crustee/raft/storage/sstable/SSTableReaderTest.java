@@ -25,7 +25,7 @@ public class SSTableReaderTest extends AbstractSSTableTest {
         test(memtable, this::initSstable,
                 (writer, table, index) -> {
 
-                    try(SSTableReader reader = new SSTableReader(table.toPath(), index.toPath())) {
+                    try (SSTableReader reader = new SSTableReader(table.toPath(), index.toPath(), key -> true)) {
 
                         ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 1);
                         Optional<Row> value = reader.get(key);
@@ -33,6 +33,25 @@ public class SSTableReaderTest extends AbstractSSTableTest {
                         assertThat(value.get().asMap()).isEqualTo(singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, 1),
                                 ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1)));
+
+                        assertThat(reader.getCount()).isEqualTo(1);
+                        assertThat(reader.getReadCount()).isEqualTo(1);
+                    }
+                });
+    }
+
+    @Test
+    public void should_skip_reading_not_in_bloom_filter() throws IOException {
+        WritableMemtable memtable = createMemtable(3);
+
+        test(memtable, this::initSstable,
+                (writer, table, index) -> {
+                    try (SSTableReader reader = new SSTableReader(table.toPath(), index.toPath(), key -> false)) {
+                        ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 42);
+                        Optional<Row> value = reader.get(key);
+                        assertThat(value.isPresent()).isFalse();
+                        assertThat(reader.getCount()).isEqualTo(1);
+                        assertThat(reader.getReadCount()).isEqualTo(0);
                     }
                 });
     }
@@ -40,9 +59,9 @@ public class SSTableReaderTest extends AbstractSSTableTest {
     private WritableMemtable createMemtable(int entries) {
         WritableMemtable memtable = new LockFreeBTreeMemtable(1L);
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i),
-                        singletonMap(
-                                ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
-                                ByteBuffer.allocate(VALUE_SIZE).putInt(0, i)))
+                singletonMap(
+                        ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
+                        ByteBuffer.allocate(VALUE_SIZE).putInt(0, i)))
         );
         return memtable;
     }
