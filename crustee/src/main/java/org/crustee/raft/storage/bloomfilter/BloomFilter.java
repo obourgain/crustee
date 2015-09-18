@@ -63,7 +63,7 @@ public final class BloomFilter implements MutableBloomFilter {
     private static int hashFunctionCount(long elementCount, long bitCount) {
         // alias parameters have consistent naming with the classic formulas
         long m = bitCount;
-        long n = elementCount;
+        long n = Math.max(elementCount, 1); // avoid division by 0 if is 0 passed as elementCount
         long k = Math.round((m / n) * Math.log(2));
         assert k <= Integer.MAX_VALUE;
         return (int) k;
