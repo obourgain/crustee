@@ -6,7 +6,6 @@ import java.util.concurrent.ExecutorService;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
-import org.crustee.raft.storage.sstable.SSTableReader;
 import org.crustee.raft.storage.sstable.SSTableWriter;
 import org.crustee.raft.storage.table.CrusteeTable;
 import org.crustee.raft.utils.UncheckedIOUtils;
@@ -49,12 +48,12 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
         Path indexPath = UncheckedIOUtils.tempFile();
         try (SSTableWriter ssTableWriter = new SSTableWriter(tablePath, indexPath, memtable)) {
             ssTableWriter.write();
+            long end = System.currentTimeMillis();
+            crusteeTable.memtableFlushed(memtable, ssTableWriter.toReader());
+            logger.info("flush memtable duration {} for sstable {}, index {}", (end - start), tablePath, indexPath);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        long end = System.currentTimeMillis();
-        crusteeTable.memtableFlushed(memtable, new SSTableReader(tablePath, indexPath));
-        logger.info("flush memtable duration {} for sstable {}, index {}", (end - start), tablePath, indexPath);
     }
 
     @Override

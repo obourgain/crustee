@@ -5,10 +5,12 @@ import static java.nio.file.StandardOpenOption.READ;
 import java.io.Closeable;
 import java.io.Flushable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ReadableByteChannel;
@@ -18,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.FileAttribute;
 
 public class UncheckedIOUtils {
 
@@ -168,11 +171,40 @@ public class UncheckedIOUtils {
         }
     }
 
+    public static void createFile(Path path, FileAttribute ... fileAttributes) {
+        try {
+            Files.createFile(path, fileAttributes);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public static void delete(Path path) {
         try {
             Files.delete(path);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * The byte buffer must be of a size sufficient to fully write the content of the channel.
+     * e.g. this method can be used to copy the content of a file to a buffer allocated with a size equal to the file length.
+     *
+     * It is not meant to be fast, only to be convenient.
+     *
+     * This method flips the buffer, so what was read from the channel is ready to be read.
+     */
+    public static void copy(ReadableByteChannel channel, ByteBuffer byteBuffer) {
+        byte[] buffer = new byte[8 * 1024];
+        int read;
+        try (InputStream inputStream = Channels.newInputStream(channel)) {
+            while ((read = inputStream.read(buffer)) != -1) {
+                byteBuffer.put(buffer, 0, read);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        byteBuffer.flip();
     }
 }

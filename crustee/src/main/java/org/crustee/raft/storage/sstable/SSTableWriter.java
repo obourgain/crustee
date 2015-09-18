@@ -7,10 +7,13 @@ import static org.crustee.raft.utils.UncheckedIOUtils.openChannel;
 import static org.crustee.raft.utils.UncheckedIOUtils.position;
 import static org.crustee.raft.utils.UncheckedIOUtils.size;
 import static org.slf4j.LoggerFactory.getLogger;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.Iterator;
+import org.crustee.raft.storage.bloomfilter.BloomFilter;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.UncheckedIOUtils;
@@ -39,6 +42,8 @@ public class SSTableWriter implements AutoCloseable {
 
     private long offset = 0;
 
+    private final BloomFilter bloomFilter;
+
     public SSTableWriter(Path table, Path index, ReadOnlyMemtable memtable) {
         this.table = table;
         this.index = index;
@@ -50,13 +55,14 @@ public class SSTableWriter implements AutoCloseable {
         this.indexChannel = openChannel(index, WRITE);
 
         this.header = new SSTableHeader(memtable.getCount(), memtable.getCreationTimestamp());
+        this.bloomFilter = BloomFilter.create(memtable.getCount(), 0.01d);
     }
 
     public SSTableReader toReader() {
         // it would be better with only CLOSED, but with SYNCED it is easier to use with
-        // try-with-resource
+        // try-with-resource on the caller side
         assert completedState == State.CLOSED | completedState == State.SYNCED;
-        return new SSTableReader(table, index);
+        return new SSTableReader(table, index, bloomFilter);
     }
 
     public void write() {
@@ -69,12 +75,22 @@ public class SSTableWriter implements AutoCloseable {
         writeCompletedHeader();
         completedState = State.COMPLETE_HEADER;
 
+        // put the bloom filter next to the index
+        Path bloomFilterPath = index.resolveSibling(index.getFileName() + ".bf");
+        UncheckedIOUtils.createFile(bloomFilterPath);
+        try (FileChannel bloomFilterChannel = openChannel(bloomFilterPath, WRITE)) {
+            bloomFilter.writeTo(bloomFilterChannel);
+            fsync(bloomFilterChannel, true);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
         fsync(tableChannel, true);
         fsync(indexChannel, true);
         Path tableDir = table.getParent();
         Path indexDir = index.getParent();
         fsyncDir(tableDir);
-        if(!indexDir.equals(tableDir)) {
+        if (!indexDir.equals(tableDir)) {
             fsyncDir(indexDir);
         }
         completedState = State.SYNCED;
@@ -130,6 +146,8 @@ public class SSTableWriter implements AutoCloseable {
         valuesOffsets.add(offset);
         offset += keyValueLengthBuffer.limit() + key.limit() + totalSize;
         entriesSize.add(totalSize);
+
+        bloomFilter.add(key);
     }
 
     private ByteBuffer[] concat(ByteBuffer keyValueLengthBuffer, ByteBuffer rowKey, ByteBuffer[] buffers) {

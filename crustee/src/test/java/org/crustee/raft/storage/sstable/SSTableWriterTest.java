@@ -69,6 +69,19 @@ public class SSTableWriterTest extends AbstractSSTableTest {
     }
 
     @Test
+    public void should_write_bloomfilter() throws IOException {
+        int entries = 100_000;
+        WritableMemtable memtable = createMemtable(entries);
+
+        test(memtable, (writer, table, index) -> {
+            writer.write();
+
+            Path bloomFilterPath = index.toPath().resolveSibling(index.toPath().getFileName() + ".bf");
+            assertThat(bloomFilterPath).exists();
+        });
+    }
+
+    @Test
     @Ignore("convert that into a proper jmh bench")
     public void diry_perf_test() throws IOException {
         for (int i = 0; i < 100; i++) {
@@ -103,9 +116,9 @@ public class SSTableWriterTest extends AbstractSSTableTest {
     private WritableMemtable createMemtable(int entries) {
         WritableMemtable memtable = new LockFreeBTreeMemtable(1L);
         IntStream.range(0, entries).forEach(i -> memtable.insert(ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, i).putInt(4, i),
-                        singletonMap(
-                                ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
-                                ByteBuffer.allocate(VALUE_SIZE).putInt(0, i)))
+                singletonMap(
+                        ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, i),
+                        ByteBuffer.allocate(VALUE_SIZE).putInt(0, i)))
         );
         return memtable;
     }
