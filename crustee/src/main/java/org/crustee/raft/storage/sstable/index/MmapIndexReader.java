@@ -19,7 +19,7 @@ public class MmapIndexReader implements IndexReader {
     private volatile boolean closed = false;
 
     public MmapIndexReader(Path index) {
-        map = UncheckedIOUtils.map(index);
+        map = UncheckedIOUtils.mapReadOnly(index);
         indexFileSize = map.limit();
     }
 

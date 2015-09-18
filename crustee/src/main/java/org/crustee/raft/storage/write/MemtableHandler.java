@@ -70,7 +70,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            segmentsToClose.forEach(Segment::close);
+            segmentsToClose.forEach(Segment::release);
         }
     }
 

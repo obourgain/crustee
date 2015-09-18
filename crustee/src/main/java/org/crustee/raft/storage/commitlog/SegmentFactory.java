@@ -1,15 +1,11 @@
 package org.crustee.raft.storage.commitlog;
 
-import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
-import static java.nio.file.StandardOpenOption.READ;
-import static java.nio.file.StandardOpenOption.WRITE;
 import static org.crustee.raft.utils.UncheckedIOUtils.fsyncDir;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.io.UncheckedIOException;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -22,8 +18,6 @@ import org.slf4j.Logger;
 public class SegmentFactory {
 
     private static final Logger logger = getLogger(SegmentFactory.class);
-
-    private static final boolean USE_MMAP_SEGMENT = true;
 
     private final int size;
     private final ExecutorService executor;
@@ -44,23 +38,13 @@ public class SegmentFactory {
 
     protected Segment createSegment() {
         Path path = UncheckedIOUtils.tempFile();
-        try(RandomAccessFile file = new RandomAccessFile(path.toFile(), "rw")) {
+        try (RandomAccessFile file = new RandomAccessFile(path.toFile(), "rw")) {
             file.setLength(size);
             // file length is in metadata
             file.getChannel().force(true);
-            if (USE_MMAP_SEGMENT) {
-                fsyncDir(path.getParent());
-                try(FileChannel fileChannel = UncheckedIOUtils.openChannel(path, READ, WRITE)) {
-                    MappedByteBuffer map = fileChannel.map(READ_WRITE, 0, size);
-                    return new MmapSegment(map);
-                }
-            } else {
-                // TODO gather metrics on segment creation
-                ChannelSegment segment = new ChannelSegment(file.getChannel());
-                fsyncDir(path.getParent());
-                return segment;
-
-            }
+            fsyncDir(path.getParent());
+            MappedByteBuffer map = UncheckedIOUtils.mapReadWrite(path);
+            return new MmapSegment(map, path);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

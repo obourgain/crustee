@@ -39,10 +39,6 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
         if (endOfBatch || nextBufferIndex >= maxEvents || sizeInBytes >= maxSizeInBytes) {
             flushBuffer(event);
         }
-
-        if (sequence % 10_000_000 == 0) {
-            logger.info("journaled event {}", sequence);
-        }
     }
 
     private void flushBuffer(WriteEvent event) {
@@ -51,6 +47,7 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
         if(newSegment != null) {
             // avoid writing null in most cases, decreasing memory traffic is probably better than removing a correctly predicted branch
             // TODO microbench it !
+            newSegment.acquire();
             event.setSegment(newSegment);
         }
 

@@ -3,8 +3,10 @@ package org.crustee.raft.storage.commitlog;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
+import java.nio.file.Path;
 import java.util.UUID;
 import org.crustee.raft.utils.ByteBufferUtils;
+import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 
 public class MmapSegment implements Segment {
@@ -13,11 +15,15 @@ public class MmapSegment implements Segment {
 
     private UUID uuid = UUID.randomUUID();
     private final MappedByteBuffer mappedFile;
+    private final Path file;
     private long syncedPosition = 0;
+
+    private int referenceCount = 0;
     private volatile boolean closed = false;
 
-    public MmapSegment(MappedByteBuffer buffer) {
+    public MmapSegment(MappedByteBuffer buffer, Path file) {
         mappedFile = buffer;
+        this.file = file;
     }
 
     public void append(ByteBuffer buffer, int size) {
@@ -69,10 +75,32 @@ public class MmapSegment implements Segment {
     }
 
     @Override
-    public void close() {
-        // TODO try to call the cleaner ?
+    public synchronized void acquire() {
+        if(closed) {
+            throw new IllegalStateException("This segment is already closed");
+        }
+        referenceCount++;
+    }
+
+    @Override
+    public synchronized void release() {
+        referenceCount--;
+        if(referenceCount == 0) {
+            close();
+        }
+    }
+
+    @Override
+    public boolean isClosed() {
+        return closed;
+    }
+
+    private void close() {
+        logger.debug("Closing segment {}", this);
         closed = true;
+        mappedFile.force(); // be sure that the segment is sync'ed to disk
         ByteBufferUtils.tryUnmap(mappedFile);
+        UncheckedIOUtils.delete(file);
     }
 
     @Override
