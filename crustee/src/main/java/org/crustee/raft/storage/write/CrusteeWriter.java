@@ -63,7 +63,7 @@ public class CrusteeWriter {
             });
             return thread;
         });
-        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, flushMemtableExecutor, 1_000_000);
+        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, flushMemtableExecutor, commitLog.getCurrentSegment(), 1_000_000);
 
         disruptor
                 .handleEventsWith(commitLogWriteHandler)

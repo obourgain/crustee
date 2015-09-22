@@ -67,4 +67,8 @@ public class CommitLog {
     public void syncCurrent() {
         current.sync();
     }
+
+    public Segment getCurrentSegment() {
+        return current;
+    }
 }

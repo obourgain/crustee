@@ -52,7 +52,7 @@ public class Bootstrap {
         CommitLogFSyncHandler commitLogFSyncHandler = createCommitLogFSyncHandler(settings, commitLog);
 
         CrusteeTable crusteeTable = new CrusteeTable();
-        MemtableHandler memtableHandler = createMemtableHandler(settings, crusteeTable);
+        MemtableHandler memtableHandler = createMemtableHandler(settings, crusteeTable, commitLog);
 
         disruptor
                 .handleEventsWith(commitLogWriteHandler)
@@ -77,7 +77,7 @@ public class Bootstrap {
         return new CommitLogFSyncHandler(commitLog, maxUnsyncedSize, maxUnsyncedCount);
     }
 
-    private MemtableHandler createMemtableHandler(Settings settings, CrusteeTable crusteeTable) {
+    private MemtableHandler createMemtableHandler(Settings settings, CrusteeTable crusteeTable, CommitLog commitLog) {
         int minFlusherThreads = settings.getMemtableFlushThreadMin();
         int maxFlusherThreads = settings.getMemtableFlushThreadMax();
         ExecutorService flushMemtableExecutor = new ThreadPoolExecutor(minFlusherThreads, maxFlusherThreads, MAX_VALUE, TimeUnit.DAYS, new LinkedBlockingQueue<>(10),
@@ -89,7 +89,7 @@ public class Bootstrap {
                     return thread;
                 });
 
-        return new MemtableHandler(crusteeTable, flushMemtableExecutor, 1_000_000);
+        return new MemtableHandler(crusteeTable, flushMemtableExecutor, commitLog.getCurrentSegment(), 1_000_000);
     }
 
     private Settings loadSettings() {

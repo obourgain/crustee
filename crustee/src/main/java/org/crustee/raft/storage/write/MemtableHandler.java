@@ -26,10 +26,13 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     private final ExecutorService flushMemtableExecutor;
     private final int maxEvents;
 
-    public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor, int maxEvents) {
+    public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor, Segment commitLog, int maxEvents) {
         this.table = table;
         this.flushMemtableExecutor = flushMemtableExecutor;
         this.segments = new ArrayList<>();
+        // We need to manage the first segment differently as we won't get it through write events.
+        // Write events only carry a segment if it changes from the previous event, not if it is the first.
+        this.segments.add(commitLog);
         this.maxEvents = maxEvents;
     }
 
