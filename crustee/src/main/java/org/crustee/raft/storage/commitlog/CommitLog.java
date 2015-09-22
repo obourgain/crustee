@@ -3,9 +3,9 @@ package org.crustee.raft.storage.commitlog;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.concurrent.BlockingQueue;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.crustee.raft.storage.btree.ArrayUtils;
 import org.crustee.raft.utils.UncheckedFutureUtils;
 
@@ -13,7 +13,7 @@ public class CommitLog {
 
     private Segment current;
     private Future<Segment> next;
-    private BlockingQueue<Segment> oldSegments = new LinkedBlockingQueue<>();
+    private Queue<Segment> oldSegments = new ConcurrentLinkedQueue<>();
 
     private WeakReference<Thread> owner;
 
@@ -70,7 +70,7 @@ public class CommitLog {
         return current;
     }
 
-    public BlockingQueue<Segment> getOldSegments() {
+    public Queue<Segment> getOldSegments() {
         return oldSegments;
     }
 }

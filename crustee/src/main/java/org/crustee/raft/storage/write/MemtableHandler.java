@@ -30,9 +30,6 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
         event.getRowKey().position(0);
         memtable.insert(event.getRowKey(), event.getValues());
-        if (sequence % 10_000_000 == 0) {
-            logger.info("inserted event {}", sequence);
-        }
         if (memtable.getCount() >= 1_000_000) {
             logger.info("flushing memtable");
             ReadOnlyMemtable oldMemtable = memtable.freeze();
