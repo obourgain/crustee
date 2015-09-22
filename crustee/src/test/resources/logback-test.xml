@@ -10,6 +10,8 @@
         </filter>
     </appender>
 
+    <logger name="org.crustee.raft.storage.bloomfilter.BloomFilter" level="INFO"/>
+
     <root>
         <level value="DEBUG" />
         <appender-ref ref="STDOUT" />
