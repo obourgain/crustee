@@ -11,11 +11,13 @@ import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.storage.sstable.SSTableReader;
 
-public class CrusteeTable {
+public class CrusteeTable implements AutoCloseable {
 
     protected volatile Tables tables = new Tables();
+    private volatile boolean closed = false;
 
     public SortedMap<ByteBuffer, ByteBuffer> get(ByteBuffer key) {
+        ensureOpen();
         // capture current state
         Tables localTables = this.tables;
         Iterator<ReadOnlyMemtable> memtableIterator = localTables.memtables.iterator();
@@ -56,11 +58,33 @@ public class CrusteeTable {
     }
 
     public synchronized void registerMemtable(ReadOnlyMemtable memtable) {
+        ensureOpen();
         this.tables = this.tables.with(memtable);
     }
 
     public synchronized void memtableFlushed(ReadOnlyMemtable memtable, SSTableReader ssTableReader) {
+        ensureOpen();
         this.tables = this.tables.memtableFlushed(memtable, ssTableReader);
+    }
+
+    private void ensureOpen() {
+        if(closed) {
+            throw new IllegalStateException("Table have been closed");
+        }
+    }
+
+    @Override
+    public synchronized void close() throws Exception {
+        if(closed) {
+            throw new IllegalStateException("Table have already been closed");
+        }
+        Tables currentTables = this.tables;
+        // allow the GC to release stuff
+        this.tables = new Tables();
+        // This may cause exceptions about the sstables being closed, but we don't care
+        // as the table will be put offline, so we are only breaking read that occure at the same time as the shutdown.
+        currentTables.close();
+        closed = true;
     }
 
     protected static class Tables {
@@ -101,6 +125,10 @@ public class CrusteeTable {
                     "memtables=" + memtables +
                     ", ssTableReaders=" + ssTableReaders +
                     '}';
+        }
+
+        public void close() {
+            ssTableReaders.forEach(SSTableReader::close);
         }
     }
 

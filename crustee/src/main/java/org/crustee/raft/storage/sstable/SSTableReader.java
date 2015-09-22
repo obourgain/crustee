@@ -53,8 +53,8 @@ public class SSTableReader implements AutoCloseable, Timestamped {
 
     @Override
     protected void finalize() throws Throwable {
-        if (closed) {
-            logger.warn("an SSTableWriter have not been closed, this may cause a resource leak");
+        if (!closed) {
+            logger.warn("an SSTableReader have not been closed, this may cause a resource leak");
             close();
         }
         super.finalize();
