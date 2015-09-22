@@ -51,7 +51,7 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
         ReadOnlyMemtable oldMemtable = memtable;
         Segment currentsegment = this.segments.get(this.segments.size() - 1);
         List<Segment> segmentsToClose = this.segments.subList(0, this.segments.size() - 1);
-        flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table, segmentsToClose));
+        flushMemtableExecutor.execute(() -> writeSSTable(oldMemtable, table, segmentsToClose));
         newMemtable();
         this.segments = new ArrayList<>();
         this.segments.add(currentsegment);
