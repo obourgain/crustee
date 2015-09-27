@@ -20,17 +20,19 @@ public class MemtableHandler implements EventHandler<WriteEvent>, LifecycleAware
     private WritableMemtable memtable;
     private final CrusteeTable table;
     private final ExecutorService flushMemtableExecutor;
+    private final int maxEvents;
 
-    public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor) {
+    public MemtableHandler(CrusteeTable table, ExecutorService flushMemtableExecutor, int maxEvents) {
         this.table = table;
         this.flushMemtableExecutor = flushMemtableExecutor;
+        this.maxEvents = maxEvents;
     }
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
-        event.getRowKey().position(0);
+        assert event.getRowKey().position() == 0 : "Event's key position is not 0 " + event.getRowKey().position();
         memtable.insert(event.getRowKey(), event.getValues());
-        if (memtable.getCount() >= 1_000_000) {
+        if (memtable.getCount() >= maxEvents) {
             logger.info("flushing memtable");
             ReadOnlyMemtable oldMemtable = memtable.freeze();
             flushMemtableExecutor.submit(() -> writeSSTable(oldMemtable, table));

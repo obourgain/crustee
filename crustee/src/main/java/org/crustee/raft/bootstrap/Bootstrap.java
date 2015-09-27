@@ -89,7 +89,7 @@ public class Bootstrap {
                     return thread;
                 });
 
-        return new MemtableHandler(crusteeTable, flushMemtableExecutor);
+        return new MemtableHandler(crusteeTable, flushMemtableExecutor, 1_000_000);
     }
 
     private Settings loadSettings() {

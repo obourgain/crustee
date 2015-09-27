@@ -50,7 +50,7 @@ public class CrusteeWriter {
         RingBuffer<WriteEvent> ringBuffer = disruptor.getRingBuffer();
         CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog, 1024 * 1024, 1024);
         CommitLogFSyncHandler commitLogFSyncHandler = new CommitLogFSyncHandler(commitLog, 1024 * 1024, 1024);
-        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000)));
+        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000)), 1_000_000);
 
         disruptor
                 .handleEventsWith(commitLogWriteHandler)
