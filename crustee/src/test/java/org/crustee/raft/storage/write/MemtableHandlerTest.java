@@ -10,6 +10,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.crustee.raft.storage.commitlog.Segment;
 import org.crustee.raft.storage.table.CrusteeTable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -21,6 +22,9 @@ public class MemtableHandlerTest {
 
     @Mock
     private CrusteeTable table;
+
+    @Mock
+    private Segment segment;
 
     @Test
     public void test_flush_when_threshold_is_exceeded() throws Exception {
@@ -36,7 +40,7 @@ public class MemtableHandlerTest {
                     return t;
                 });
 
-        MemtableHandler memtableHandler = new MemtableHandler(table, executor, 1);
+        MemtableHandler memtableHandler = new MemtableHandler(table, executor, segment, 1);
 
         try {
             memtableHandler.onStart();
@@ -50,14 +54,14 @@ public class MemtableHandlerTest {
 
     @Test
     public void should_register_new_memtable() throws Exception {
-        MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), 1);
+        MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), segment, 1);
         memtableHandler.onStart();
         verify(table).registerMemtable(any());
     }
 
     @Test
     public void should_register_sstable_after_flush() throws Exception {
-        MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), 1);
+        MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), segment, 1);
         memtableHandler.onStart();
         memtableHandler.onEvent(dummyWriteEvent(), 1, false);
         verify(table).memtableFlushed(any(), any());
