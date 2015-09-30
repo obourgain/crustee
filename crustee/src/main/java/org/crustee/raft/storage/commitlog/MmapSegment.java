@@ -6,7 +6,6 @@ import java.nio.MappedByteBuffer;
 import java.nio.file.Path;
 import java.util.UUID;
 import org.crustee.raft.utils.ByteBufferUtils;
-import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 
 public class MmapSegment implements Segment {
@@ -100,7 +99,7 @@ public class MmapSegment implements Segment {
         closed = true;
         mappedFile.force(); // be sure that the segment is sync'ed to disk
         ByteBufferUtils.tryUnmap(mappedFile);
-        UncheckedIOUtils.delete(file);
+        // TODO have a segment manager to recycle/delete old segments
     }
 
     @Override
