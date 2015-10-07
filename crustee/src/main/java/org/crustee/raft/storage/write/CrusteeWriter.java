@@ -111,7 +111,7 @@ public class CrusteeWriter {
             throw new RuntimeException(e);
         }
 
-        int i = BENCH_COUNT / 100;
+        int i = BENCH_COUNT;
         logger.info("start reading {} ", i);
         for (long l = 0; l < i; l++) {
             blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
@@ -126,11 +126,11 @@ public class CrusteeWriter {
     private static void publishEvent(WriteEventProducer producer, long l) {
         int keySize = randomKeySize();
         int valueSize = randomValueSize();
-        ByteBuffer command = ByteBuffer.allocate(keySize + valueSize);
+        ByteBuffer command = ByteBuffer.allocateDirect(keySize + valueSize);
         ByteBuffer key = (ByteBuffer) command.duplicate().limit(keySize);
-        ByteBuffer columnValue = ByteBuffer.allocate(valueSize);
+        ByteBuffer columnValue = ByteBuffer.allocateDirect(valueSize);
         Map<ByteBuffer, ByteBuffer> value = Collections.singletonMap(ByteBuffer.allocate(keySize), columnValue);
-        key.putLong(0, l);
+        key.putLong(0, 0);
         columnValue.putLong(0, l);
         producer.onWriteRequest(command, key, value);
     }

@@ -2,7 +2,7 @@ package org.crustee.raft.storage.sstable;
 
 import static java.lang.String.format;
 import static java.nio.file.StandardOpenOption.READ;
-import static org.crustee.raft.utils.ByteBufferUtils.toHexString;
+import static org.crustee.raft.utils.ByteBufferDebug.toHexString;
 import static org.crustee.raft.utils.UncheckedIOUtils.openChannel;
 import static org.crustee.raft.utils.UncheckedIOUtils.position;
 import static org.crustee.raft.utils.UncheckedIOUtils.size;

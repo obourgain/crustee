@@ -9,9 +9,11 @@ public class SegmentFactoryTest {
     public void should_create_new_segment() throws Exception {
         SegmentFactory factory = new SegmentFactory(128);
         Segment segment = factory.createSegment();
+        segment.acquire();
         assertThat(segment.getMaxSize()).isEqualTo(128);
         assertThat(segment.getPosition()).isEqualTo(0);
         assertThat(segment.isSynced()).isEqualTo(true);
+        segment.release();
     }
 
     @Test

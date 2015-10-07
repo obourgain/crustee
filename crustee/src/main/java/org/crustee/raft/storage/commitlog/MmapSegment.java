@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.utils.ByteBufferUtils;
 import org.slf4j.Logger;
 
@@ -19,7 +20,8 @@ public class MmapSegment implements Segment {
     private final Path file;
     private long syncedPosition = 0;
 
-    private int referenceCount = 0;
+    @VisibleForTesting
+    protected int referenceCount = 0;
     private volatile boolean closed = false;
 
     public MmapSegment(MappedByteBuffer buffer, Path file) {
@@ -31,7 +33,7 @@ public class MmapSegment implements Segment {
     public void append(ByteBuffer buffer) {
         int bytes = buffer.limit();
         for (int i = 0; i < bytes; i++) {
-            mappedFile.put(buffer.get());
+            mappedFile.put(buffer.get(i));
         }
     }
 
@@ -76,20 +78,16 @@ public class MmapSegment implements Segment {
     @Override
     public synchronized void acquire() {
         if (closed) {
-            for (Exception acquire : acquires) {
-                acquire.printStackTrace();
-            }
-            for (Exception release : releases) {
-                release.printStackTrace();
-            }
+            acquires.forEach(Exception::printStackTrace);
+            releases.forEach(Exception::printStackTrace);
             throw new IllegalStateException("This segment is already closed");
         }
         referenceCount++;
         acquires.add(new Exception());
     }
 
-    List<Exception> acquires = new ArrayList<>();
-    List<Exception> releases = new ArrayList<>();
+    private List<Exception> acquires = new ArrayList<>();
+    private List<Exception> releases = new ArrayList<>();
 
     @Override
     public synchronized void release() {
@@ -106,7 +104,8 @@ public class MmapSegment implements Segment {
         return closed;
     }
 
-    private void close() {
+    @VisibleForTesting
+    protected void close() {
         logger.debug("Closing segment {}", this);
         closed = true;
         mappedFile.force(); // be sure that the segment is sync'ed to disk
@@ -118,8 +117,14 @@ public class MmapSegment implements Segment {
     protected void finalize() throws Throwable {
         if (!closed) {
             logger.warn("Segment was not closed before finalization");
+//            acquires.forEach(Throwable::printStackTrace);
             close();
         }
         super.finalize();
+    }
+
+    @VisibleForTesting
+    protected long getSyncedPosition() {
+        return syncedPosition;
     }
 }

@@ -57,8 +57,6 @@ public class LockFreeBTree<K, V> {
 
     private static final boolean ASSERTION_ENABLED = LockFreeBTree.class.desiredAssertionStatus();
 
-    private static final Node[] EMPTY = {};
-
     private static final int base;
     private static final int shift;
 
@@ -182,8 +180,7 @@ public class LockFreeBTree<K, V> {
             if (compare < 0) {
                 // lesser, we go to the left child
                 Node<K, V> child = node.childAt(i);
-                V value = doGet(key, child);
-                return value;
+                return doGet(key, child);
             }
             if (compare == 0) {
                 return node.valueAt(i);
@@ -194,13 +191,22 @@ public class LockFreeBTree<K, V> {
     }
 
     protected static class Node<K, V> {
+
+        private static final Node[] EMPTY = {};
+
         protected final Node<K, V>[] children;
         protected final K[] keys;
         protected final V[] columns;
         private int numberOfKeys;
 
+        private static <K, V> Node<K, V>[] empty() {
+            //noinspection unchecked
+            return EMPTY;
+        }
+
+        @SuppressWarnings("unchecked")
         private Node(LockFreeBTree<K, V> bTree, boolean withChildren) {
-            children = withChildren ? new Node[bTree.size + 1] : EMPTY;
+            children = withChildren ? new Node[bTree.size + 1] : empty();
             keys = (K[]) Array.newInstance(bTree.keyClass, bTree.size);
             columns = (V[]) Array.newInstance(bTree.valueClass, bTree.size);
             numberOfKeys = 0;
@@ -377,7 +383,7 @@ public class LockFreeBTree<K, V> {
         }
 
         public Node<K, V> childAt(int index) {
-            return (Node<K, V>) UNSAFE.getObjectVolatile(children, byteOffset(index));
+            return getVolatileArrayElement(this.children, index);
         }
 
         /**
@@ -394,11 +400,11 @@ public class LockFreeBTree<K, V> {
         }
 
         public K keyAt(int index) {
-            return (K) UNSAFE.getObjectVolatile(keys, byteOffset(index));
+            return getVolatileArrayElement(keys, index);
         }
 
         public V valueAt(int index) {
-            return (V) UNSAFE.getObjectVolatile(columns, byteOffset(index));
+            return getVolatileArrayElement(columns, index);
         }
 
         public V fastValueAt(int index, LockFreeBTree bTree) {
@@ -439,6 +445,11 @@ public class LockFreeBTree<K, V> {
             bTree.currentThreadIsWriter();
             columns[index] = value;
             keys[index] = rowKey;
+        }
+
+        @SuppressWarnings("unchecked")
+        protected static <T> T getVolatileArrayElement(T[] array, int index) {
+            return (T) UNSAFE.getObjectVolatile(array, byteOffset(index));
         }
 
         private static long byteOffset(int i) {

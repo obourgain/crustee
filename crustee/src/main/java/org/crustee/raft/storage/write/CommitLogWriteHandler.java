@@ -18,8 +18,6 @@ public class CommitLogWriteHandler implements EventHandler<WriteEvent>, Lifecycl
         Segment newSegment = commitLog.write(event.getCommand());
         if (newSegment != null) {
             newSegment.acquire(); // this acquire is paired with a release by the last consumer of segments transmitted via events
-            // avoid writing null in most cases, decreasing memory traffic is probably better than removing a correctly predicted branch
-            // TODO microbench it !
             event.setSegment(newSegment);
         }
     }

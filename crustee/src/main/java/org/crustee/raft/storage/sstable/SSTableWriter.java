@@ -7,12 +7,15 @@ import static org.crustee.raft.utils.UncheckedIOUtils.openChannel;
 import static org.crustee.raft.utils.UncheckedIOUtils.position;
 import static org.crustee.raft.utils.UncheckedIOUtils.size;
 import static org.slf4j.LoggerFactory.getLogger;
+import java.io.Flushable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.GatheringByteChannel;
 import java.nio.file.Path;
 import java.util.Iterator;
+import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.bloomfilter.BloomFilter;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
@@ -26,6 +29,9 @@ import com.carrotsearch.hppc.cursors.LongCursor;
 public class SSTableWriter implements AutoCloseable {
 
     private static final Logger logger = getLogger(SSTableWriter.class);
+
+    private static final int TABLE_ENTRY_KEY_VALUE_LENGTH = Short.BYTES + Integer.BYTES;
+    private static final int INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH = Short.BYTES + Long.BYTES + Integer.BYTES;
 
     private final Path table;
     private final Path index;
@@ -43,6 +49,8 @@ public class SSTableWriter implements AutoCloseable {
     private long offset = 0;
 
     private final BloomFilter bloomFilter;
+    private final BufferingChannel tableBuffer;
+    private final BufferingChannel indexBuffer;
 
     public SSTableWriter(Path table, Path index, ReadOnlyMemtable memtable) {
         this.table = table;
@@ -53,6 +61,9 @@ public class SSTableWriter implements AutoCloseable {
 
         this.tableChannel = openChannel(table, WRITE);
         this.indexChannel = openChannel(index, WRITE);
+
+        tableBuffer = new BufferingChannel(tableChannel, TABLE_ENTRY_KEY_VALUE_LENGTH);
+        indexBuffer = new BufferingChannel(indexChannel, INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH);
 
         this.header = new SSTableHeader(memtable.getCount(), memtable.getCreationTimestamp());
         this.bloomFilter = BloomFilter.create(memtable.getCount(), 0.01d);
@@ -72,6 +83,13 @@ public class SSTableWriter implements AutoCloseable {
         completedState = State.TABLE;
         writeIndex();
         completedState = State.INDEX;
+
+        // We flush right now because if a sstable reader is created from this writer and exposed to
+        // reader threads, the flush may not have yet occurred. Furthermore, we need to
+        // flush before fsync'ing.
+        UncheckedIOUtils.flush(tableBuffer);
+        UncheckedIOUtils.flush(indexBuffer);
+
         writeCompletedHeader();
         completedState = State.COMPLETE_HEADER;
 
@@ -130,18 +148,17 @@ public class SSTableWriter implements AutoCloseable {
         SerializedRow serializedRow = Serializer.serialize(value);
         int totalSize = serializedRow.totalSize();
 
-        ByteBuffer keyValueLengthBuffer = ByteBuffer.allocate(2 + 4);
+//        ByteBuffer keyValueLengthBuffer = ByteBuffer.allocate(2 + 4);
+        ByteBuffer keyValueLengthBuffer = tableBuffer.getPreallocatedBuffer();
+        assert keyValueLengthBuffer.position() == 0;
+        assert keyValueLengthBuffer.limit() == TABLE_ENTRY_KEY_VALUE_LENGTH;
         keyValueLengthBuffer.putShort((short) key.limit());
         keyValueLengthBuffer.putInt(totalSize);
 
-        ByteBuffer[] buffers = concat(
-                (ByteBuffer) keyValueLengthBuffer.flip(),
-                // we have to duplicate because a reader may get a reference to the key while we are writing
-                key.duplicate(),
-                serializedRow.getBuffers()
-        );
-
-        UncheckedIOUtils.write(tableChannel, buffers);
+        UncheckedIOUtils.write(tableBuffer, (ByteBuffer) keyValueLengthBuffer.flip());
+        // we have to duplicate because a reader may get a reference to the key while we are writing
+        UncheckedIOUtils.write(tableBuffer, key.duplicate());
+        UncheckedIOUtils.write(tableBuffer, serializedRow.getBuffers());
 
         valuesOffsets.add(offset);
         offset += keyValueLengthBuffer.limit() + key.limit() + totalSize;
@@ -150,20 +167,15 @@ public class SSTableWriter implements AutoCloseable {
         bloomFilter.add(key);
     }
 
-    private ByteBuffer[] concat(ByteBuffer keyValueLengthBuffer, ByteBuffer rowKey, ByteBuffer[] buffers) {
-        ByteBuffer[] result = new ByteBuffer[1 + 1 + buffers.length];
-        result[0] = keyValueLengthBuffer;
-        result[1] = rowKey;
-        System.arraycopy(buffers, 0, result, 2, buffers.length);
-        return result;
-    }
-
     private void writeIndex() {
         assert completedState == State.TABLE;
-        ByteBuffer keySizeOffsetAndValueSize = ByteBuffer.allocate(2 + 8 + 4);
         Iterator<LongCursor> offsets = valuesOffsets.iterator();
         Iterator<IntCursor> sizes = entriesSize.iterator();
         memtable.applyInOrder((k, v) -> {
+//            ByteBuffer keySizeOffsetAndValueSize = ByteBuffer.allocate(2 + 8 + 4);
+            ByteBuffer keySizeOffsetAndValueSize = indexBuffer.getPreallocatedBuffer();
+            assert keySizeOffsetAndValueSize.position() == 0;
+            assert keySizeOffsetAndValueSize.limit() == INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
             assert offsets.hasNext();
             assert sizes.hasNext();
             long nextOffset = offsets.next().value;
@@ -187,16 +199,14 @@ public class SSTableWriter implements AutoCloseable {
                 .putLong(nextOffset)
                 .putInt(serializedValueSize)
                 .flip();
-        UncheckedIOUtils.write(indexChannel, new ByteBuffer[]{
-                keySizeOffsetAndValueSize,
-                (ByteBuffer) key.duplicate().position(0)
-        });
+        UncheckedIOUtils.write(indexBuffer, keySizeOffsetAndValueSize);
+        UncheckedIOUtils.write(indexBuffer, (ByteBuffer) key.duplicate().position(0));
     }
 
     public void close() {
         // also closes the files
-        UncheckedIOUtils.close(indexChannel);
-        UncheckedIOUtils.close(tableChannel);
+        UncheckedIOUtils.close(indexBuffer);
+        UncheckedIOUtils.close(tableBuffer);
         completedState = State.CLOSED;
     }
 
@@ -217,5 +227,101 @@ public class SSTableWriter implements AutoCloseable {
         COMPLETE_HEADER,
         SYNCED,
         CLOSED
+    }
+
+    private static class BufferingChannel implements GatheringByteChannel, Flushable {
+
+        public static final int BUFFERED_CHANNEL_BUFFER_SIZE = 256;
+
+        private final FileChannel delegate;
+        private final ByteBuffer[] buffer = new ByteBuffer[BUFFERED_CHANNEL_BUFFER_SIZE];
+        private int bufferIndex = 0;
+        private final BufferCache bufferCache;
+
+        // this class is highly specific to the use case here because we have the buffering over
+        // a channel but also a cache of preallocated buffers of a specific size, used here to
+        // wirte the fixed-size part of the entries
+        private BufferingChannel(FileChannel delegate, int preallocatedBufferSize) {
+            this.delegate = delegate;
+            this.bufferCache = new BufferCache(BUFFERED_CHANNEL_BUFFER_SIZE, preallocatedBufferSize);
+        }
+
+        public ByteBuffer getPreallocatedBuffer() {
+            return bufferCache.get();
+        }
+
+        @Override
+        public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+            long sum = 0;
+            for (int i = offset; i < offset + length; i++) {
+                sum += write(srcs[i]);
+            }
+            return sum;
+        }
+
+        @Override
+        public long write(ByteBuffer[] srcs) throws IOException {
+            return write(srcs, 0, srcs.length);
+        }
+
+        @Override
+        public int write(ByteBuffer src) throws IOException {
+            int limit = src.limit();
+            buffer[bufferIndex] = src;
+            bufferIndex++;
+            if(bufferIndex == buffer.length) {
+                flush();
+            }
+            return limit;
+        }
+
+        @Override
+        public boolean isOpen() {
+            return delegate.isOpen();
+        }
+
+        public void flush() throws IOException {
+            if(bufferIndex != 0) {
+                delegate.write(buffer, 0, bufferIndex);
+                bufferIndex = 0; // no need to clear the array as the ByteBuffers are already referenced in the memtable, so no garbage is kept
+                bufferCache.reset();
+            }
+
+        }
+        @Override
+        public void close() throws IOException {
+            if(bufferIndex != 0) {
+                throw new IllegalStateException("Write buffer have not been flushed before closing it");
+            }
+            delegate.close();
+        }
+    }
+
+    @VisibleForTesting
+    protected static class BufferCache {
+
+        protected final ByteBuffer[] buffers;
+        private int index = 0;
+
+        BufferCache(int count, int size) {
+            this.buffers = new ByteBuffer[count];
+            ByteBuffer slab = ByteBuffer.allocateDirect(size * count);
+            for (int i = 0; i < buffers.length; i++) {
+                slab.position(i* size);
+                buffers[i] = (ByteBuffer) slab.slice().limit(size);
+            }
+        }
+
+        public ByteBuffer get() {
+            assert index < buffers.length;
+            return buffers[index++];
+        }
+
+        public void reset() {
+            index = 0;
+            for (ByteBuffer buffer : buffers) {
+                buffer.position(0);
+            }
+        }
     }
 }

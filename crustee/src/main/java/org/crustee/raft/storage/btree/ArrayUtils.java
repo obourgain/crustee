@@ -5,10 +5,6 @@ import java.util.Comparator;
 
 public class ArrayUtils {
 
-    public static <T> T lastElement(T[] array) {
-        return array[array.length - 1];
-    }
-
     public static <T> T lastNonNullElement(T[] array) {
         return array[lastNonNullElementIndex(array)];
     }
@@ -104,16 +100,6 @@ public class ArrayUtils {
                 return mid; // key found
         }
         return -(low + 1);  // key not found.
-    }
-
-    public static void removeFirstOccurence(Object[] array, Object a) {
-        for (int i = 0; i < array.length; i++) {
-            Object o = array[i];
-            if (a == o) {
-                array[i] = null;
-                return;
-            }
-        }
     }
 
     public static boolean hasGaps(Object[] array) {

@@ -21,6 +21,7 @@ public class CommitLog {
         this.segmentFactory = segmentFactory;
         this.current = UncheckedFutureUtils.get(segmentFactory.newSegment());
         this.next = segmentFactory.newSegment();
+        setOwnerThread();
     }
 
     public Segment write(ByteBuffer buffer) {
@@ -46,11 +47,13 @@ public class CommitLog {
     }
 
     public void setOwnerThread() {
-        owner = new WeakReference<>(Thread.currentThread());
+        if(CommitLog.class.desiredAssertionStatus()) {
+            owner = new WeakReference<>(Thread.currentThread());
+        }
     }
 
-    public void syncCurrent() {
-        current.sync();
+    public long syncCurrent() {
+        return current.sync();
     }
 
     public Segment getCurrentSegment() {
@@ -68,16 +71,11 @@ public class CommitLog {
     }
 
     public long syncSegments() {
-        Segment old;
-        long synced = 0;
-        while ((old = oldSegments.poll()) != null) {
-            synced += old.sync();
-            old.release();
-        }
+        long synced = syncOldSegments();
         // TODO there is a race confition here if the current changes and is put in oldSegents, we won't sync it
         // next sync call will flush it but i am not really comfortable with having an old commit log unsynced while
         // the current one is synced
-        current.sync();
+        synced += syncCurrent();
         return synced;
     }
 }

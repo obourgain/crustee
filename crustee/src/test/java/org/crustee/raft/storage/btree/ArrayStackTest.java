@@ -41,4 +41,14 @@ public class ArrayStackTest {
 
         assertThat(stack.nextIndex).isEqualTo(2);
     }
+
+    @Test
+    public void should_clear() throws Exception {
+        ArrayStack<String> stack = new ArrayStack<>(4);
+        stack.push("foo");
+        stack.push("foo");
+        stack.clear();
+
+        assertThat(stack.nextIndex).isEqualTo(0);
+    }
 }
