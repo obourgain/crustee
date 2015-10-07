@@ -1,9 +1,13 @@
 package org.crustee.raft.storage.memtable;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.btree.LockFreeBTree;
+import org.crustee.raft.storage.commitlog.Segment;
 import org.crustee.raft.storage.row.MapRow;
 import org.crustee.raft.storage.row.Row;
 import org.crustee.raft.utils.ByteBufferUtils;
@@ -15,6 +19,9 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
     private volatile long estimatedSizeInBytes = 0;
 
     private final long creationTimestamp;
+
+    @VisibleForTesting
+    protected final List<Segment> segments = new ArrayList<>();
 
     public LockFreeBTreeMemtable(long creationTimestamp) {
         this.creationTimestamp = creationTimestamp;
@@ -46,8 +53,19 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
     }
 
     @Override
+    public void addSegment(Segment segment) {
+        segment.acquire();
+        this.segments.add(segment);
+    }
+
+    @Override
     public long getEstimatedSizeInBytes() {
         return estimatedSizeInBytes;
+    }
+
+    @Override
+    public void close() {
+        segments.forEach(Segment::release);
     }
 
     @Override
@@ -60,7 +78,6 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
         bTree.freeze();
         return this;
     }
-
 
     private boolean areAtPosition0(Map<ByteBuffer, ByteBuffer> values) {
         for (Map.Entry<ByteBuffer, ByteBuffer> entry : values.entrySet()) {

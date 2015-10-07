@@ -4,6 +4,8 @@ import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.crustee.raft.utils.ByteBufferUtils;
 import org.slf4j.Logger;
@@ -12,7 +14,7 @@ public class MmapSegment implements Segment {
 
     private static final Logger logger = getLogger(MmapSegment.class);
 
-    private UUID uuid = UUID.randomUUID();
+    private final UUID uuid = UUID.randomUUID();
     private final MappedByteBuffer mappedFile;
     private final Path file;
     private long syncedPosition = 0;
@@ -25,26 +27,20 @@ public class MmapSegment implements Segment {
         this.file = file;
     }
 
-    public void append(ByteBuffer buffer, int size) {
-        int remaining = buffer.remaining();
-        for (int i = 0; i < remaining; i++) {
+    @Override
+    public void append(ByteBuffer buffer) {
+        int bytes = buffer.limit();
+        for (int i = 0; i < bytes; i++) {
             mappedFile.put(buffer.get());
         }
     }
 
-    public void append(ByteBuffer[] buffers, int length) {
-        // to avoid some allocation, we allow to reuse the same array, so some slots may be null
-        int size = 0;
-        for (int i = 0; i < length; i++) {
-            ByteBuffer buffer = buffers[i];
-            append(buffer, size);
-        }
-    }
-
+    @Override
     public boolean canWrite(int size) {
         return mappedFile.remaining() >= size;
     }
 
+    @Override
     public long sync() {
         if (isSynced()) {
             return 0;
@@ -57,34 +53,50 @@ public class MmapSegment implements Segment {
         return bytesToSync;
     }
 
+    @Override
     public boolean isSynced() {
         return mappedFile.position() == syncedPosition;
     }
 
+    @Override
     public long getMaxSize() {
         return mappedFile.capacity();
     }
 
+    @Override
     public long getPosition() {
         return mappedFile.position();
     }
 
+    @Override
     public UUID getUuid() {
         return uuid;
     }
 
     @Override
     public synchronized void acquire() {
-        if(closed) {
+        if (closed) {
+            for (Exception acquire : acquires) {
+                acquire.printStackTrace();
+            }
+            for (Exception release : releases) {
+                release.printStackTrace();
+            }
             throw new IllegalStateException("This segment is already closed");
         }
         referenceCount++;
+        acquires.add(new Exception());
     }
+
+    List<Exception> acquires = new ArrayList<>();
+    List<Exception> releases = new ArrayList<>();
 
     @Override
     public synchronized void release() {
+        assert referenceCount > 0 : "released more than acquired";
         referenceCount--;
-        if(referenceCount == 0) {
+        releases.add(new Exception());
+        if (referenceCount == 0) {
             close();
         }
     }

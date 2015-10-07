@@ -4,6 +4,7 @@ import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorS
 import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
@@ -15,6 +16,7 @@ import org.crustee.raft.storage.table.CrusteeTable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -43,7 +45,6 @@ public class MemtableHandlerTest {
         MemtableHandler memtableHandler = new MemtableHandler(table, executor, segment, 1);
 
         try {
-            memtableHandler.onStart();
             memtableHandler.onEvent(dummyWriteEvent(), 1, false);
             boolean timelyRelease = latch.await(2, TimeUnit.SECONDS);
             assertThat(timelyRelease).isTrue();
@@ -53,16 +54,27 @@ public class MemtableHandlerTest {
     }
 
     @Test
+    public void should_register_new_segment_to_memtable() throws Exception {
+        MemtableHandler handler = new MemtableHandler(table, newDirectExecutorService(), segment, 1);
+        Segment newSegment = Mockito.mock(Segment.class);
+        WriteEvent writeEvent = dummyWriteEvent();
+        writeEvent.setSegment(newSegment);
+
+        handler.onEvent(writeEvent, 10, true);
+
+        handler.memtable.close(); // apply an action to the new segment
+        verify(newSegment, times(2)).release(); // one when added to the event, one on close()
+    }
+
+    @Test
     public void should_register_new_memtable() throws Exception {
-        MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), segment, 1);
-        memtableHandler.onStart();
+        new MemtableHandler(table, newDirectExecutorService(), segment, 1);
         verify(table).registerMemtable(any());
     }
 
     @Test
     public void should_register_sstable_after_flush() throws Exception {
         MemtableHandler memtableHandler = new MemtableHandler(table, newDirectExecutorService(), segment, 1);
-        memtableHandler.onStart();
         memtableHandler.onEvent(dummyWriteEvent(), 1, false);
         verify(table).memtableFlushed(any(), any());
     }

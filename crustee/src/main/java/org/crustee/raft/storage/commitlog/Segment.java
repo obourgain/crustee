@@ -4,9 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.UUID;
 
 public interface Segment {
-    void append(ByteBuffer buffer, int size);
-
-    void append(ByteBuffer[] buffers, int length);
+    void append(ByteBuffer buffer);
 
     boolean canWrite(int size);
 

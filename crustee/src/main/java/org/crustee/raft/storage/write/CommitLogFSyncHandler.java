@@ -28,7 +28,8 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
         }
         eventCount++;
         unsyncedSizeInBytes += event.getRowKey().limit(); // + event.getValues().limit(); TODO log the value
-        syncOldSegments();
+        unsyncedSizeInBytes -= commitLog.syncSegments();
+        // TODO see TODO in org.crustee.raft.storage.commitlog.CommitLog.syncSegments() about race condition
         syncCurrentIfNeeded(endOfBatch);
     }
 
@@ -37,13 +38,6 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
             current.sync();
             eventCount = 0;
             unsyncedSizeInBytes = 0;
-        }
-    }
-
-    private void syncOldSegments() {
-        Segment old;
-        while ((old = commitLog.getOldSegments().poll()) != null) {
-            unsyncedSizeInBytes -= old.sync();
         }
     }
 

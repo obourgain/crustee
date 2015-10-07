@@ -2,11 +2,9 @@ package org.crustee.raft.storage.commitlog;
 
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
-import org.crustee.raft.storage.btree.ArrayUtils;
 import org.crustee.raft.utils.UncheckedFutureUtils;
 
 public class CommitLog {
@@ -25,31 +23,22 @@ public class CommitLog {
         this.next = segmentFactory.newSegment();
     }
 
-    public Segment write(ByteBuffer[] buffers, int length) {
+    public Segment write(ByteBuffer buffer) {
         checkOwnerThread();
-        int sizeInBytes = buffersSize(buffers, length);
+        assert buffer.position() == 0;
+        int sizeInBytes = buffer.limit();
         // TODO write as much a possible in the current log
-        if(!current.canWrite(sizeInBytes)) {
+        if (current.canWrite(sizeInBytes)) {
+            current.append(buffer);
+            return null;
+        } else {
             oldSegments.add(current);
             current = UncheckedFutureUtils.get(next);
+            current.acquire(); // this acquire must be paired with a release when the old segment is fsync'ed
             next = segmentFactory.newSegment();
-            current.append(buffers, length);
+            current.append(buffer);
             return current;
-        } else {
-            current.append(buffers, length);
-            return null;
         }
-    }
-
-    protected static int buffersSize(ByteBuffer[] buffers, int length) {
-        assert ArrayUtils.lastNonNullElementIndex(buffers) + 1 == length : "off by one error " + Arrays.toString(buffers) + " / " + length;
-        long size = 0;
-        for (int i = 0; i < length; i++) {
-            size += buffers[i].limit();
-        }
-        // we don't want to write a big chunk at once in the log
-        assert size <= Integer.MAX_VALUE: "int overflow: " + size;
-        return (int) size;
     }
 
     private void checkOwnerThread() {
@@ -60,15 +49,35 @@ public class CommitLog {
         owner = new WeakReference<>(Thread.currentThread());
     }
 
-    public Queue<Segment> getOldSegments() {
-        return oldSegments;
-    }
-
     public void syncCurrent() {
         current.sync();
     }
 
     public Segment getCurrentSegment() {
         return current;
+    }
+
+    public long syncOldSegments() {
+        Segment old;
+        long synced = 0;
+        while ((old = oldSegments.poll()) != null) {
+            synced += old.sync();
+            old.release();
+        }
+        return synced;
+    }
+
+    public long syncSegments() {
+        Segment old;
+        long synced = 0;
+        while ((old = oldSegments.poll()) != null) {
+            synced += old.sync();
+            old.release();
+        }
+        // TODO there is a race confition here if the current changes and is put in oldSegents, we won't sync it
+        // next sync call will flush it but i am not really comfortable with having an old commit log unsynced while
+        // the current one is synced
+        current.sync();
+        return synced;
     }
 }

@@ -68,7 +68,7 @@ public class Bootstrap {
     private CommitLogWriteHandler createCommitLogWriteHandler(Settings settings, CommitLog commitLog) {
         int maxUncommitedEvents = settings.getCommitlogWriterMaxEventsBufferCount();
         int maxUncommitedSize = settings.getCommitlogWriterMaxEventsBufferSize();
-        return new CommitLogWriteHandler(commitLog, maxUncommitedSize, maxUncommitedEvents);
+        return new CommitLogWriteHandler(commitLog);
     }
 
     private CommitLogFSyncHandler createCommitLogFSyncHandler(Settings settings, CommitLog commitLog) {

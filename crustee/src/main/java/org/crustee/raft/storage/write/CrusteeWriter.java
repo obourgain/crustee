@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.crustee.raft.storage.commitlog.CommitLog;
 import org.crustee.raft.storage.commitlog.SegmentFactory;
@@ -25,7 +27,7 @@ public class CrusteeWriter {
 
     private static final Logger logger = getLogger(CrusteeWriter.class);
 
-    public static final int BENCH_COUNT = 20 * 1000 * 1000;
+    public static final int BENCH_COUNT = 10 * 1000 * 1000;
     public static final int WARMUP_COUNT = 100_000;
     public static final int KEY_SIZE = 16;
     public static final int VAlUE_SIZE = 200;
@@ -33,15 +35,9 @@ public class CrusteeWriter {
     // see https://github.com/LMAX-Exchange/disruptor/wiki/Getting-Started
 
     public static void main(String[] args) throws InterruptedException {
-        CommitLog commitLog = new CommitLog(new SegmentFactory(128*1024*1024));
+        CommitLog commitLog = new CommitLog(new SegmentFactory(128 * 1024 * 1024));
 
-        Executor executor = Executors.newCachedThreadPool(r -> {
-            Thread thread = new Thread(r);
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                logger.error("", e);
-            });
-            return thread;
-        });
+        Executor executor = Executors.newCachedThreadPool();
 
         WriteEventFactory factory = new WriteEventFactory();
 
@@ -54,20 +50,21 @@ public class CrusteeWriter {
         CrusteeTable crusteeTable = new CrusteeTable();
 
         RingBuffer<WriteEvent> ringBuffer = disruptor.getRingBuffer();
-        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog, 1024 * 1024, 1024);
+        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog);
         CommitLogFSyncHandler commitLogFSyncHandler = new CommitLogFSyncHandler(commitLog, 1024 * 1024, 1024);
         ThreadPoolExecutor flushMemtableExecutor = new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000), r -> {
             Thread thread = new Thread(r);
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                logger.error("", e);
-            });
+            thread.setUncaughtExceptionHandler((t, e) -> logger.error("", e));
             return thread;
         });
         MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, flushMemtableExecutor, commitLog.getCurrentSegment(), 1_000_000);
 
+        new ScheduledThreadPoolExecutor(1, (ThreadFactory) Thread::new)
+                .scheduleAtFixedRate(commitLog::syncSegments, 1, 1, SECONDS);
+
         disruptor
                 .handleEventsWith(commitLogWriteHandler)
-                .then(commitLogFSyncHandler)
+//                .then(commitLogFSyncHandler)
                 .then(memtableHandler);
 
         disruptor.start();
