@@ -80,6 +80,8 @@ public class LockFreeBTreeMemtable implements WritableMemtable {
     }
 
     private boolean areAtPosition0(Map<ByteBuffer, ByteBuffer> values) {
+        // this method returns a boolean because it should be used in an assert statement to allow the whole method to
+        // be removed by dead code elimination
         for (Map.Entry<ByteBuffer, ByteBuffer> entry : values.entrySet()) {
             assert entry.getKey().position() == 0;
             assert entry.getValue().position() == 0;

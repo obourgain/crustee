@@ -32,7 +32,7 @@ public class MmapSegmentTest {
         try (RandomAccessFile raf = UncheckedIOUtils.openRandomAccessFile(path, "rw")) {
             raf.setLength(SEGMENT_SIZE);
         }
-        mmap = UncheckedIOUtils.mapReadWrite(path);
+        mmap = UncheckedIOUtils.map(path);
     }
 
     @After

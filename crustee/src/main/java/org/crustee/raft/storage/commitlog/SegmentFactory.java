@@ -43,7 +43,7 @@ public class SegmentFactory {
             // file length is in metadata
             file.getChannel().force(true);
             fsyncDir(path.getParent());
-            MappedByteBuffer map = UncheckedIOUtils.mapReadWrite(path);
+            MappedByteBuffer map = UncheckedIOUtils.map(path);
             return new MmapSegment(map, path);
         } catch (IOException e) {
             throw new UncheckedIOException(e);

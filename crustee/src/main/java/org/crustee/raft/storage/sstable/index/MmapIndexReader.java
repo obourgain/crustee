@@ -19,7 +19,7 @@ public class MmapIndexReader implements IndexReader {
     private volatile boolean closed = false;
 
     public MmapIndexReader(Path index) {
-        map = UncheckedIOUtils.mapReadOnly(index);
+        map = UncheckedIOUtils.map(index);
         indexFileSize = map.limit();
     }
 
@@ -60,7 +60,7 @@ public class MmapIndexReader implements IndexReader {
     public void close() throws IOException {
         boolean unmapped = ByteBufferUtils.tryUnmap(map);
         if (!unmapped) {
-            logger.info("memory mapped index was not closed, this may cause GC later");
+            logger.info("memory mapped index memory was not released, this may cause GC later");
         }
         closed = true;
     }

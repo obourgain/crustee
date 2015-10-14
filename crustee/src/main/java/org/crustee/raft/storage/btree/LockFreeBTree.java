@@ -110,6 +110,7 @@ public class LockFreeBTree<K, V> {
     public void freeze() {
         currentThreadIsWriter();
         this.frozen = true;
+        pathStack.clear();
     }
 
     public void insert(K rowKey, UpdateAction<V> updateAction) {
@@ -166,7 +167,7 @@ public class LockFreeBTree<K, V> {
     private V doGet(K key, Node<K, V> node) {
         verifyInvariants(node);
         if (node.isLeaf()) {
-            int index = ArrayUtils.linearSearch(node.keys, key, comparator);
+            int index = search(node.keys, 0, node.numberOfKeys(), key, comparator);
             if (index < 0) {
                 return null;
             }
@@ -370,7 +371,7 @@ public class LockFreeBTree<K, V> {
          * Should only be called by writer thread or after a freeze() and a safe publication of the changes
          */
         public boolean fastHasKeyAt(int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             return keys[index] != null;
         }
 
@@ -378,7 +379,7 @@ public class LockFreeBTree<K, V> {
          * Should only be called by writer thread or after a freeze() and a safe publication of the changes
          */
         public boolean fastHasChildAt(int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             return children[index] != null;
         }
 
@@ -390,12 +391,12 @@ public class LockFreeBTree<K, V> {
          * Should only be called by writer thread or after a freeze() and a safe publication of the changes
          */
         public Node<K, V> fastChildAt(int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             return children[index];
         }
 
         public K fastKeyAt(int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             return keys[index];
         }
 
@@ -408,7 +409,7 @@ public class LockFreeBTree<K, V> {
         }
 
         public V fastValueAt(int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             return columns[index];
         }
 
@@ -428,7 +429,7 @@ public class LockFreeBTree<K, V> {
          * Do not enforce visibility, use only when an other op guarantee safe publication
          */
         public void fastSet(K rowKey, UpdateAction<V> updateAction, int index, LockFreeBTree bTree) {
-            bTree.currentThreadIsWriter();
+            currentThreadIsWriter(bTree);
             if (columns[index] == null) {
                 columns[index] = updateAction.insert();
             } else {
@@ -460,6 +461,11 @@ public class LockFreeBTree<K, V> {
             return numberOfKeys == bTree.size;
         }
 
+        private void currentThreadIsWriter(LockFreeBTree bTree) {
+            if (AUTO_VERIFY_INVARIANTS_ENABLE) {
+                assert bTree.writerThread.get() == Thread.currentThread() | bTree.frozen;
+            }
+        }
     }
 
     public void executeOnEachNode(Consumer<Node> action) {
