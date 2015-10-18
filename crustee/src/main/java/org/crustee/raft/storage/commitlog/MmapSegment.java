@@ -5,7 +5,9 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.utils.ByteBufferUtils;
@@ -14,6 +16,8 @@ import org.slf4j.Logger;
 public class MmapSegment implements Segment {
 
     private static final Logger logger = getLogger(MmapSegment.class);
+
+    private static final boolean DEBUG = Boolean.getBoolean("commitlog.segment.debug");
 
     private final UUID uuid = UUID.randomUUID();
     private final MappedByteBuffer mappedFile;
@@ -27,6 +31,7 @@ public class MmapSegment implements Segment {
     public MmapSegment(MappedByteBuffer buffer, Path file) {
         mappedFile = buffer;
         this.file = file;
+        allocation = DEBUG ? Optional.of(new Exception()) : Optional.empty();
     }
 
     @Override
@@ -78,22 +83,29 @@ public class MmapSegment implements Segment {
     @Override
     public synchronized void acquire() {
         if (closed) {
-            acquires.forEach(Exception::printStackTrace);
-            releases.forEach(Exception::printStackTrace);
+            if(DEBUG) {
+                acquires.forEach(Exception::printStackTrace);
+                releases.forEach(Exception::printStackTrace);
+            }
             throw new IllegalStateException("This segment is already closed");
         }
         referenceCount++;
-        acquires.add(new Exception());
+        if(DEBUG) {
+            acquires.add(new Exception());
+        }
     }
 
-    private List<Exception> acquires = new ArrayList<>();
-    private List<Exception> releases = new ArrayList<>();
+    private Optional<Exception> allocation = Optional.empty();
+    private List<Exception> acquires = DEBUG ? new ArrayList<>() : Collections.emptyList();
+    private List<Exception> releases = DEBUG ? new ArrayList<>() : Collections.emptyList();
 
     @Override
     public synchronized void release() {
         assert referenceCount > 0 : "released more than acquired";
         referenceCount--;
-        releases.add(new Exception());
+        if(DEBUG) {
+            releases.add(new Exception());
+        }
         if (referenceCount == 0) {
             close();
         }
@@ -117,7 +129,8 @@ public class MmapSegment implements Segment {
     protected void finalize() throws Throwable {
         if (!closed) {
             logger.warn("Segment was not closed before finalization");
-//            acquires.forEach(Throwable::printStackTrace);
+            allocation.ifPresent(Exception::printStackTrace);
+            acquires.forEach(Throwable::printStackTrace);
             close();
         }
         super.finalize();

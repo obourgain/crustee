@@ -11,14 +11,17 @@ import java.io.Flushable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Iterator;
 import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.bloomfilter.BloomFilter;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
+import org.crustee.raft.utils.ByteBufferUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 import com.carrotsearch.hppc.IntArrayList;
@@ -172,7 +175,6 @@ public class SSTableWriter implements AutoCloseable {
         Iterator<LongCursor> offsets = valuesOffsets.iterator();
         Iterator<IntCursor> sizes = entriesSize.iterator();
         memtable.applyInOrder((k, v) -> {
-//            ByteBuffer keySizeOffsetAndValueSize = ByteBuffer.allocate(2 + 8 + 4);
             ByteBuffer keySizeOffsetAndValueSize = indexBuffer.getPreallocatedBuffer();
             assert keySizeOffsetAndValueSize.position() == 0;
             assert keySizeOffsetAndValueSize.limit() == INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
@@ -236,18 +238,18 @@ public class SSTableWriter implements AutoCloseable {
         private final FileChannel delegate;
         private final ByteBuffer[] buffer = new ByteBuffer[BUFFERED_CHANNEL_BUFFER_SIZE];
         private int bufferIndex = 0;
-        private final BufferCache bufferCache;
+        private final TemporaryMetadataBufferSlab temporaryMetadataBufferSlab;
 
         // this class is highly specific to the use case here because we have the buffering over
-        // a channel but also a cache of preallocated buffers of a specific size, used here to
-        // wirte the fixed-size part of the entries
+        // a channel but also a cache of pre allocated buffers of a specific size, used here to
+        // write the fixed-size part of the entries
         private BufferingChannel(FileChannel delegate, int preallocatedBufferSize) {
             this.delegate = delegate;
-            this.bufferCache = new BufferCache(BUFFERED_CHANNEL_BUFFER_SIZE, preallocatedBufferSize);
+            this.temporaryMetadataBufferSlab = new TemporaryMetadataBufferSlab(BUFFERED_CHANNEL_BUFFER_SIZE, preallocatedBufferSize);
         }
 
         public ByteBuffer getPreallocatedBuffer() {
-            return bufferCache.get();
+            return temporaryMetadataBufferSlab.get();
         }
 
         @Override
@@ -284,7 +286,7 @@ public class SSTableWriter implements AutoCloseable {
             if(bufferIndex != 0) {
                 delegate.write(buffer, 0, bufferIndex);
                 bufferIndex = 0; // no need to clear the array as the ByteBuffers are already referenced in the memtable, so no garbage is kept
-                bufferCache.reset();
+                temporaryMetadataBufferSlab.reset();
             }
 
         }
@@ -294,34 +296,48 @@ public class SSTableWriter implements AutoCloseable {
                 throw new IllegalStateException("Write buffer have not been flushed before closing it");
             }
             delegate.close();
+            temporaryMetadataBufferSlab.close();
         }
     }
 
     @VisibleForTesting
-    protected static class BufferCache {
+    protected static class TemporaryMetadataBufferSlab {
+
+        // allocate a single chunk of direct memory and slice it in small parts for the metadata of each of the entries to write
 
         protected final ByteBuffer[] buffers;
         private int index = 0;
+        private final MappedByteBuffer slab;
 
-        BufferCache(int count, int size) {
+        private boolean closed = false;
+
+        TemporaryMetadataBufferSlab(int count, int size) {
             this.buffers = new ByteBuffer[count];
-            ByteBuffer slab = ByteBuffer.allocateDirect(size * count);
+            slab = (MappedByteBuffer) ByteBuffer.allocateDirect(size * count);
             for (int i = 0; i < buffers.length; i++) {
                 slab.position(i* size);
                 buffers[i] = (ByteBuffer) slab.slice().limit(size);
             }
         }
 
-        public ByteBuffer get() {
+        ByteBuffer get() {
+            assert !closed;
             assert index < buffers.length;
             return buffers[index++];
         }
 
-        public void reset() {
+        void reset() {
+            assert !closed;
             index = 0;
             for (ByteBuffer buffer : buffers) {
                 buffer.position(0);
             }
+        }
+
+        void close() {
+            Arrays.fill(buffers, null);
+            ByteBufferUtils.tryUnmap(slab);
+            closed = true;
         }
     }
 }

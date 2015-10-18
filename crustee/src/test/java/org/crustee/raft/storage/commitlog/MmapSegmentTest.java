@@ -45,6 +45,7 @@ public class MmapSegmentTest {
     @Test
     public void should_append_buffer() throws Exception {
         MmapSegment segment = new MmapSegment(mmap, path);
+        segment.acquire();
         try {
             int size = 12;
             ByteBuffer buffer = ByteBuffer.allocate(size);
@@ -54,13 +55,14 @@ public class MmapSegmentTest {
             assertThat(segment.getPosition()).isEqualTo(size);
             assertThat(buffer.position()).describedAs("should not consume the buffer").isEqualTo(0);
         } finally {
-            segment.close();
+            segment.release();
         }
     }
 
     @Test
     public void should_sync_if_needed() throws Exception {
         MmapSegment segment = new MmapSegment(mmap, path);
+        segment.acquire();
         try {
             int size = 12;
             ByteBuffer buffer = ByteBuffer.allocate(size);
@@ -79,7 +81,7 @@ public class MmapSegmentTest {
     @Test
     public void should_determine_if_can_accept_buffer() throws Exception {
         MmapSegment segment = new MmapSegment(mmap, path);
-
+        segment.acquire();
         try {
             assertThat(segment.canWrite(10)).isTrue();
 
