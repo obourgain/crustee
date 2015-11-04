@@ -14,4 +14,16 @@ public interface ByteAccessor {
     long writeTo(WritableByteChannel channel);
 
     void readFrom(ReadableByteChannel channel, int size);
+
+    default boolean isContentEqual(ByteAccessor other) {
+        if(maxIndex() != other.maxIndex()) {
+            return false;
+        }
+        for (int i = 0; i < maxIndex(); i++) {
+            if(this.get(i) != other.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -1,6 +1,6 @@
 package org.crustee.raft.storage.bloomfilter;
 
-import static org.assertj.core.api.StrictAssertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;

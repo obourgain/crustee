@@ -1,7 +1,8 @@
 package org.crustee.raft.utils;
 
-import static java.nio.channels.FileChannel.MapMode.READ_ONLY;
+import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
 import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.WRITE;
 import java.io.Closeable;
 import java.io.Flushable;
 import java.io.IOException;
@@ -164,8 +165,10 @@ public class UncheckedIOUtils {
     }
 
     public static MappedByteBuffer map(Path path) {
-        try(FileChannel channel = FileChannel.open(path, READ)) {
-            return channel.map(READ_ONLY, 0, channel.size());
+        // don't use map readonly as this will return a DirectByteBufferR, which is
+        // not cleanable without doing even worst wriggles
+        try(FileChannel channel = FileChannel.open(path, READ, WRITE)) {
+            return channel.map(READ_WRITE, 0, channel.size());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

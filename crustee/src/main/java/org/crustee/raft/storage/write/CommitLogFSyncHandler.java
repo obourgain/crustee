@@ -7,6 +7,7 @@ import com.lmax.disruptor.EventHandler;
 public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
 
     private final CommitLog commitLog;
+    private Segment current;
 
     private final int maxUnsyncedSizeInBytes;
     private final int maxUnsyncedCount;
@@ -15,21 +16,26 @@ public class CommitLogFSyncHandler implements EventHandler<WriteEvent> {
 
     public CommitLogFSyncHandler(CommitLog commitLog, int maxUncommitedSize, int maxUnsyncedCount) {
         this.commitLog = commitLog;
+        this.current = commitLog.getCurrentSegment();
         this.maxUnsyncedSizeInBytes = maxUncommitedSize;
         this.maxUnsyncedCount = maxUnsyncedCount;
     }
 
     @Override
     public void onEvent(WriteEvent event, long sequence, boolean endOfBatch) throws Exception {
+        if(event.getSegment() != null) {
+            current = event.getSegment();
+        }
         eventCount++;
         unsyncedSizeInBytes += event.getRowKey().limit(); // + event.getValues().limit(); TODO log the value
-        Segment old;
-        // sync all old commit logs
-        while ((old = commitLog.getOldSegments().poll()) != null) {
-            old.sync();
-        }
-        if(endOfBatch || eventCount >= maxUnsyncedCount || unsyncedSizeInBytes >= maxUnsyncedSizeInBytes) {
-            commitLog.getCurrent().sync();
+        unsyncedSizeInBytes -= commitLog.syncSegments();
+        // TODO see TODO in org.crustee.raft.storage.commitlog.CommitLog.syncSegments() about race condition
+        syncCurrentIfNeeded(endOfBatch);
+    }
+
+    private void syncCurrentIfNeeded(boolean endOfBatch) {
+        if (endOfBatch || unsyncedSizeInBytes >= maxUnsyncedSizeInBytes || eventCount >= maxUnsyncedCount) {
+            current.sync();
             eventCount = 0;
             unsyncedSizeInBytes = 0;
         }

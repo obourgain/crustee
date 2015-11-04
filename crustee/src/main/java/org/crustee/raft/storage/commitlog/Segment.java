@@ -3,10 +3,8 @@ package org.crustee.raft.storage.commitlog;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-public interface Segment extends AutoCloseable {
-    void append(ByteBuffer buffer, int size);
-
-    void append(ByteBuffer[] buffers, int length);
+public interface Segment {
+    void append(ByteBuffer buffer);
 
     boolean canWrite(int size);
 
@@ -20,4 +18,9 @@ public interface Segment extends AutoCloseable {
 
     UUID getUuid();
 
+    void acquire();
+
+    void release();
+
+    boolean isClosed();
 }

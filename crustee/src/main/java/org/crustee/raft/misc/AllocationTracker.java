@@ -5,7 +5,6 @@ import java.lang.management.ManagementFactory;
 import org.slf4j.Logger;
 
 public class AllocationTracker {
-
     private static final Logger logger = getLogger(AllocationTracker.class);
 
     private static final long GARBAGE_GENERATED_BY_MEASURE;

@@ -15,4 +15,6 @@ public interface ReadOnlyMemtable extends Timestamped {
 
     long getEstimatedSizeInBytes();
 
+    void close();
+
 }

@@ -2,8 +2,8 @@ package org.crustee.raft.storage.sstable;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import org.crustee.raft.storage.memtable.WritableMemtable;
+import org.crustee.raft.utils.UncheckedIOUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
@@ -30,8 +30,8 @@ public abstract class AbstractSSTableTest {
                 action.run(writer, table, index);
             }
         } finally {
-            Files.deleteIfExists(table.toPath());
-            Files.deleteIfExists(index.toPath());
+            UncheckedIOUtils.delete(index.toPath());
+            UncheckedIOUtils.delete(table.toPath());
         }
     }
 

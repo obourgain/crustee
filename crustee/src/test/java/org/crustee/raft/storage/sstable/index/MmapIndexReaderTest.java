@@ -12,6 +12,7 @@ import org.crustee.raft.storage.sstable.AbstractSSTableTest;
 import org.crustee.raft.storage.sstable.RowLocation;
 import org.crustee.raft.storage.sstable.SSTableHeader;
 import org.crustee.raft.storage.sstable.Serializer;
+import org.junit.Assume;
 import org.junit.Test;
 
 public class MmapIndexReaderTest extends AbstractSSTableTest {
@@ -85,6 +86,7 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
 
     @Test
     public void should_reject_key_too_long() throws Exception {
+        Assume.assumeTrue(MmapIndexReader.class.desiredAssertionStatus());
         test(memtable(), this::initSstable,
                 (writer, table, index) -> {
                     try (IndexReader reader = IndexReaderFactory.create(index.toPath())) {

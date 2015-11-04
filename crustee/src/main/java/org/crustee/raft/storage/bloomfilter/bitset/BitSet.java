@@ -76,4 +76,20 @@ public class BitSet {
         return new BitSet(byteAccessor);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        BitSet bitSet = (BitSet) o;
+
+        // do not use equals() because we may have different implementations and we are only interested in the content
+        return byteAccessor.isContentEqual(bitSet.byteAccessor);
+
+    }
+
+    @Override
+    public int hashCode() {
+        return byteAccessor.hashCode();
+    }
 }

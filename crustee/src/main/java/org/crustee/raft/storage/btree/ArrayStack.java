@@ -33,19 +33,17 @@ public class ArrayStack<T> {
         nextIndex--;
         Object o = array[nextIndex];
         array[nextIndex] = null; // really useful or just overwrite ?
+        //noinspection unchecked
         return (T) o;
     }
 
     public T peek() {
+        //noinspection unchecked
         return (T) array[nextIndex - 1];
     }
 
     public boolean isEmpty() {
         return nextIndex == 0;
-    }
-
-    public void reset() {
-        nextIndex = 0;
     }
 
     public void clear() {
@@ -60,12 +58,5 @@ public class ArrayStack<T> {
             array[i] = null;
         }
 
-
-//        int i = 0;
-//        final l = this.array.length;
-//        while (i < l && [i] != null) {
-//            [i] = null;
-//            i++;
-//        }
     }
 }

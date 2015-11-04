@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.crustee.raft.storage.commitlog.CommitLog;
 import org.crustee.raft.storage.commitlog.SegmentFactory;
@@ -33,7 +35,7 @@ public class CrusteeWriter {
     // see https://github.com/LMAX-Exchange/disruptor/wiki/Getting-Started
 
     public static void main(String[] args) throws InterruptedException {
-        CommitLog commitLog = new CommitLog(new SegmentFactory(128*1024*1024));
+        CommitLog commitLog = new CommitLog(new SegmentFactory(128 * 1024 * 1024));
 
         Executor executor = Executors.newCachedThreadPool();
 
@@ -48,13 +50,21 @@ public class CrusteeWriter {
         CrusteeTable crusteeTable = new CrusteeTable();
 
         RingBuffer<WriteEvent> ringBuffer = disruptor.getRingBuffer();
-        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog, 1024 * 1024, 1024);
+        CommitLogWriteHandler commitLogWriteHandler = new CommitLogWriteHandler(commitLog);
         CommitLogFSyncHandler commitLogFSyncHandler = new CommitLogFSyncHandler(commitLog, 1024 * 1024, 1024);
-        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000)), 1_000_000);
+        ThreadPoolExecutor flushMemtableExecutor = new ThreadPoolExecutor(1, 4, 1, MINUTES, new LinkedBlockingQueue<>(1000), r -> {
+            Thread thread = new Thread(r);
+            thread.setUncaughtExceptionHandler((t, e) -> logger.error("", e));
+            return thread;
+        });
+        MemtableHandler memtableHandler = new MemtableHandler(crusteeTable, flushMemtableExecutor, commitLog.getCurrentSegment(), 1_000_000);
+
+        new ScheduledThreadPoolExecutor(1, (ThreadFactory) Thread::new)
+                .scheduleAtFixedRate(commitLog::syncSegments, 1, 1, SECONDS);
 
         disruptor
                 .handleEventsWith(commitLogWriteHandler)
-                .then(commitLogFSyncHandler)
+//                .then(commitLogFSyncHandler)
                 .then(memtableHandler);
 
         disruptor.start();
@@ -101,7 +111,7 @@ public class CrusteeWriter {
             throw new RuntimeException(e);
         }
 
-        int i = BENCH_COUNT / 100;
+        int i = BENCH_COUNT;
         logger.info("start reading {} ", i);
         for (long l = 0; l < i; l++) {
             blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
@@ -116,11 +126,11 @@ public class CrusteeWriter {
     private static void publishEvent(WriteEventProducer producer, long l) {
         int keySize = randomKeySize();
         int valueSize = randomValueSize();
-        ByteBuffer command = ByteBuffer.allocate(keySize + valueSize);
+        ByteBuffer command = ByteBuffer.allocateDirect(keySize + valueSize);
         ByteBuffer key = (ByteBuffer) command.duplicate().limit(keySize);
-        ByteBuffer columnValue = ByteBuffer.allocate(valueSize);
+        ByteBuffer columnValue = ByteBuffer.allocateDirect(valueSize);
         Map<ByteBuffer, ByteBuffer> value = Collections.singletonMap(ByteBuffer.allocate(keySize), columnValue);
-        key.putLong(0, l);
+        key.putLong(0, 0);
         columnValue.putLong(0, l);
         producer.onWriteRequest(command, key, value);
     }

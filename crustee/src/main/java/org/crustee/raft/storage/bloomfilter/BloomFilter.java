@@ -3,8 +3,8 @@ package org.crustee.raft.storage.bloomfilter;
 import static org.crustee.raft.storage.bloomfilter.Descriptor.HashFunction.CHRONICLE_XX_HASH;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
-import java.nio.channels.GatheringByteChannel;
-import java.nio.channels.ScatteringByteChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import org.crustee.raft.storage.bloomfilter.bitset.BitSet;
 import org.crustee.raft.storage.bloomfilter.bitset.UnsafeNativeAccessor;
 import org.crustee.raft.utils.UncheckedIOUtils;
@@ -117,13 +117,13 @@ public final class BloomFilter implements MutableBloomFilter {
         }
     }
 
-    public long writeTo(GatheringByteChannel channel) {
+    public long writeTo(WritableByteChannel channel) {
         long written = UncheckedIOUtils.write(channel, descriptor.asBuffer());
         written += bitSet.writeTo(channel);
         return written;
     }
 
-    public BloomFilter readFrom(ScatteringByteChannel channel) {
+    public BloomFilter readFrom(ReadableByteChannel channel) {
         Descriptor descriptor = Descriptor.fromBuffer(ByteBuffer.allocate(Descriptor.BUFFER_SIZE));
         BitSet bitSet = BitSet.readFrom(channel);
         return new BloomFilter(descriptor, bitSet);

@@ -2,6 +2,7 @@ package org.crustee.raft.storage.bloomfilter;
 
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
+import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.bloomfilter.bitset.ByteAccessor;
 import org.crustee.raft.storage.bloomfilter.bitset.ByteBufferAccessor;
 import org.crustee.raft.storage.bloomfilter.bitset.UnsafeNativeAccessor;
@@ -19,6 +20,14 @@ public class ByteAccessorFactory {
 
     public static ByteAccessor newAccessor(int size) {
         return PROVIDER.create(size);
+    }
+
+    @VisibleForTesting
+    public static ByteAccessor newAccessorFromRandomProvider(int size) {
+        double v = Math.random() * Provider.values().length;
+        Provider provider = Provider.values()[((int) v)];
+        logger.trace("using provider {}", provider);
+        return provider.create(size);
     }
 
     private enum Provider {
@@ -48,7 +57,7 @@ public class ByteAccessorFactory {
 
         static Provider fromString(String s) {
             for (Provider provider : values()) {
-                if(provider.name().equals(s)) {
+                if (provider.name().equals(s)) {
                     logger.info("Using {} ByteAccessor provider", provider);
                     return provider;
                 }

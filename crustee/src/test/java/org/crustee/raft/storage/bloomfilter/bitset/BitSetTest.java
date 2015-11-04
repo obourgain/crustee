@@ -1,12 +1,16 @@
 package org.crustee.raft.storage.bloomfilter.bitset;
 
-import static java.lang.Math.*;
+import static java.lang.Math.abs;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ByteChannel;
 import java.util.List;
 import java.util.Random;
 import java.util.stream.IntStream;
+import org.crustee.raft.storage.bloomfilter.ByteAccessorFactory;
 import org.junit.Test;
 import uk.co.real_logic.agrona.UnsafeAccess;
 
@@ -42,6 +46,62 @@ public class BitSetTest {
         for (Integer index : indices) {
             assertThat(bitSet.get(index)).isFalse();
         }
+    }
+
+    @Test
+    public void should_serialize_deserialize() throws Exception {
+            BitSet bitSet = new BitSet(ByteAccessorFactory.newAccessorFromRandomProvider(Integer.SIZE));
+
+            ByteChannel channel = new ByteArrayBackedChannel();
+            bitSet.writeTo(channel);
+            BitSet read = BitSet.readFrom(channel);
+
+            assertThat(read).isEqualTo(bitSet);
+    }
+
+    private static class ByteArrayBackedChannel implements ByteChannel {
+        ByteArrayOutputStream array = new ByteArrayOutputStream();
+
+        @Override
+        public int read(ByteBuffer dst) throws IOException {
+            if (array.size() == 0) {
+                return -1;
+            }
+            byte[] bytes = array.toByteArray();
+            int index = 0;
+            while (dst.remaining() > 0 && index < bytes.length) {
+                dst.put(bytes[index++]);
+            }
+            array = new ByteArrayOutputStream();
+            for (int i = index; i < bytes.length; i++) {
+                array.write(bytes[i]);
+            }
+            return index;
+        }
+
+        @Override
+        public int write(ByteBuffer src) throws IOException {
+            if (src.remaining() == 0) {
+                return -1;
+            }
+            int written = 0;
+            while (src.remaining() > 0) {
+                array.write(src.get());
+                written++;
+            }
+            return written;
+        }
+
+        @Override
+        public boolean isOpen() {
+            return true;
+        }
+
+        @Override
+        public void close() throws IOException {
+
+        }
+
     }
 
 }
