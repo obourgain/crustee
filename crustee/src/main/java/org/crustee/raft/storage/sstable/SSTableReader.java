@@ -6,7 +6,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Optional;
 import java.util.concurrent.atomic.LongAdder;
 import org.crustee.raft.storage.bloomfilter.ReadOnlyBloomFilter;
 import org.crustee.raft.storage.row.Row;
@@ -60,7 +59,7 @@ public class SSTableReader implements AutoCloseable, Timestamped {
         super.finalize();
     }
 
-    public Optional<Row> get(ByteBuffer key) {
+    public Row get(ByteBuffer key) {
         getCounter.increment();
         if(bloomFilter.mayBePresent(key)) {
             effectiveGetCounter.increment();
@@ -69,10 +68,10 @@ public class SSTableReader implements AutoCloseable, Timestamped {
                 ByteBuffer buffer = ByteBuffer.allocate(rowLocation.getValueSize());
                 UncheckedIOUtils.read(tableChannel, buffer, rowLocation.getValueOffset());
                 buffer.flip(); // ready to read
-                return Optional.of(Serializer.deserialize(new SerializedRow(buffer)));
+                return Serializer.deserialize(new SerializedRow(buffer));
             }
         }
-        return Optional.empty();
+        return null;
     }
 
     public long getCount() {
