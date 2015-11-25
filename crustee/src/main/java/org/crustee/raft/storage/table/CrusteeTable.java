@@ -115,7 +115,6 @@ public class CrusteeTable implements AutoCloseable {
             newReaders.sort(Timestamped.TIMESTAMPED_COMPARATOR);
             List<ReadOnlyMemtable> newMemtables = new ArrayList<>(this.memtables);
             newMemtables.remove(memtable);
-            newMemtables.sort(Timestamped.TIMESTAMPED_COMPARATOR);
             return new Tables(newMemtables, newReaders);
         }
 
