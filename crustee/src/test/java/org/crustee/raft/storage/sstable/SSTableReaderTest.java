@@ -4,12 +4,11 @@ import static java.util.Collections.singletonMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Optional;
 import java.util.stream.IntStream;
-import org.assertj.core.api.Assertions;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.crustee.raft.storage.row.Row;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class SSTableReaderTest extends AbstractSSTableTest {
@@ -28,9 +27,9 @@ public class SSTableReaderTest extends AbstractSSTableTest {
                     try (SSTableReader reader = new SSTableReader(table.toPath(), index.toPath(), key -> true)) {
 
                         ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 1);
-                        Optional<Row> value = reader.get(key);
-                        Assertions.assertThat(value).isPresent();
-                        assertThat(value.get().asMap()).isEqualTo(singletonMap(
+                        Row value = reader.get(key);
+                        Assert.assertNotNull(value);
+                        assertThat(value.asMap()).isEqualTo(singletonMap(
                                 ByteBuffer.allocate(COLUMN_KEY_SIZE).putInt(0, 1),
                                 ByteBuffer.allocate(VALUE_SIZE).putInt(0, 1)));
 
@@ -48,8 +47,8 @@ public class SSTableReaderTest extends AbstractSSTableTest {
                 (writer, table, index) -> {
                     try (SSTableReader reader = new SSTableReader(table.toPath(), index.toPath(), key -> false)) {
                         ByteBuffer key = ByteBuffer.allocate(ROW_KEY_SIZE).putInt(0, 42);
-                        Optional<Row> value = reader.get(key);
-                        assertThat(value.isPresent()).isFalse();
+                        Row value = reader.get(key);
+                        Assert.assertNull(value);
                         assertThat(reader.getCount()).isEqualTo(1);
                         assertThat(reader.getReadCount()).isEqualTo(0);
                     }

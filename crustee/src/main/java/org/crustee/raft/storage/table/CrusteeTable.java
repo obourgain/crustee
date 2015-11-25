@@ -2,9 +2,7 @@ package org.crustee.raft.storage.table;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
@@ -18,41 +16,40 @@ public class CrusteeTable implements AutoCloseable {
 
     public SortedMap<ByteBuffer, ByteBuffer> get(ByteBuffer key) {
         ensureOpen();
-        // capture current state
+
+        // Capture current state to avoid multiple volatile reads
         Tables localTables = this.tables;
-        Iterator<ReadOnlyMemtable> memtableIterator = localTables.memtables.iterator();
-        Iterator<SSTableReader> ssTablesIterator = localTables.ssTableReaders.iterator();
 
+        // Read first in sstables so we can easily overwrite with data from memtables
         TreeMap<ByteBuffer, ByteBuffer> values = new TreeMap<>();
+        boolean foundInSSTables = searchInSSTables(key, localTables.ssTableReaders, values);
+        boolean foundInMemtables = searchInMemtables(key, localTables.memtables, values);
 
-        // read first in sstables so we can easily overwrite with data from memtables
-        boolean foundInSSTables = searchInSSTables(key, ssTablesIterator, values);
-
-        boolean foundInMemtables = searchInMemtables(key, memtableIterator, values);
-        return foundInMemtables | foundInSSTables ? values : null;
+        return foundInMemtables || foundInSSTables ? values : null;
     }
 
-    private boolean searchInMemtables(ByteBuffer key, Iterator<ReadOnlyMemtable> memtableIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+    private boolean searchInSSTables(ByteBuffer key, ArrayList<SSTableReader> ssTableReaders, TreeMap<ByteBuffer, ByteBuffer> values) {
         boolean entryFound = false;
-        while(memtableIterator.hasNext()) {
-            ReadOnlyMemtable memtable = memtableIterator.next();
-            Row row = memtable.get(key);
-            if(row != null) {
-                entryFound = true;
+        for (int i = 0, s = ssTableReaders.size(); i < s; i++) {
+            SSTableReader ssTableReader = ssTableReaders.get(i);
+            Row row = ssTableReader.get(key);
+            if (row != null) {
                 values.putAll(row.asMap());
+                entryFound = true;
             }
         }
         return entryFound;
     }
 
-    private boolean searchInSSTables(ByteBuffer key, Iterator<SSTableReader> ssTablesIterator, TreeMap<ByteBuffer, ByteBuffer> values) {
+    private boolean searchInMemtables(ByteBuffer key, ArrayList<ReadOnlyMemtable> memtables, TreeMap<ByteBuffer, ByteBuffer> values) {
         boolean entryFound = false;
-        while(ssTablesIterator.hasNext()) {
-            SSTableReader ssTableReader = ssTablesIterator.next();
-
-            Optional<Row> row = ssTableReader.get(key);
-            row.map(Row::asMap).ifPresent(values::putAll);
-            entryFound |= row.isPresent();
+        for (int i = 0, s = memtables.size(); i < s; i++) {
+            ReadOnlyMemtable memtable = memtables.get(i);
+            Row row = memtable.get(key);
+            if (row != null) {
+                entryFound = true;
+                values.putAll(row.asMap());
+            }
         }
         return entryFound;
     }
@@ -75,9 +72,8 @@ public class CrusteeTable implements AutoCloseable {
 
     @Override
     public synchronized void close() throws Exception {
-        if(closed) {
-            throw new IllegalStateException("Table have already been closed");
-        }
+        ensureOpen();
+
         Tables currentTables = this.tables;
         // allow the GC to release stuff
         this.tables = new Tables();
@@ -89,12 +85,12 @@ public class CrusteeTable implements AutoCloseable {
 
     protected static class Tables {
 
-        protected final List<ReadOnlyMemtable> memtables;
-        protected final List<SSTableReader> ssTableReaders;
+        protected final ArrayList<ReadOnlyMemtable> memtables;
+        protected final ArrayList<SSTableReader> ssTableReaders;
 
         private Tables(List<ReadOnlyMemtable> memtables, List<SSTableReader> ssTableReaders) {
-            this.memtables = memtables;
-            this.ssTableReaders = ssTableReaders;
+            this.memtables = new ArrayList<>(memtables);
+            this.ssTableReaders = new ArrayList<>(ssTableReaders);
         }
 
         private Tables() {
