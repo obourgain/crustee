@@ -9,6 +9,10 @@ public class ArrayUtils {
         return array[lastNonNullElementIndex(array)];
     }
 
+    public static <T> T lastElement(T[] array) {
+        return array[array.length - 1];
+    }
+
     public static <T> int lastNonNullElementIndex(T[] array) {
         // a property of BTress is that node are at least half full (except root), so we will go faster starting from the end
         // (assuming efficient prefetchers for backward iteration)

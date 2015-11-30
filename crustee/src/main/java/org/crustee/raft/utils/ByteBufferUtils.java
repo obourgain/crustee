@@ -27,10 +27,10 @@ public class ByteBufferUtils {
             assert o2.position() == 0 : "only works when buffer's position is 0";
             int o1Remaining = o1.remaining();
             int o2Remaining = o2.remaining();
-            if(o1Remaining < o2Remaining) {
+            if (o1Remaining < o2Remaining) {
                 return -1;
             }
-            if(o1Remaining > o2Remaining) {
+            if (o1Remaining > o2Remaining) {
                 return 1;
             }
             // buffers have the same length, so this is safe
@@ -64,13 +64,13 @@ public class ByteBufferUtils {
     public static boolean equals(ByteBuffer bb1, int start1, int end1, ByteBuffer bb2, int start2, int end2) {
         int length1 = end1 - start1;
         int length2 = end2 - start2;
-        if(length1 != length2) {
+        if (length1 != length2) {
             return false;
         }
         for (int i = 0; i < length1; i++) {
             byte b1 = bb1.get(i + start1);
             byte b2 = bb2.get(i + start2);
-            if(b1 != b2) {
+            if (b1 != b2) {
                 return false;
             }
         }
@@ -92,12 +92,12 @@ public class ByteBufferUtils {
     }
 
     public static boolean tryUnmap(MappedByteBuffer byteBuffer) {
-        if(!DIRECT_BUFFER_CLEANING_ACTIVATED) {
+        if (!DIRECT_BUFFER_CLEANING_ACTIVATED) {
             return false;
         }
         try {
             Cleaner cleaner = ((DirectBuffer) byteBuffer).cleaner();
-            if(cleaner != null) {
+            if (cleaner != null) {
                 cleaner.clean();
             } else {
                 logger.info("No cleaner for {}", byteBuffer.getClass());
@@ -111,6 +111,10 @@ public class ByteBufferUtils {
 
     public static Comparator<ByteBuffer> lengthFirstComparator() {
         return lengthFirstComparator;
+    }
+
+    public static String toString(ByteBuffer buffer) {
+        return toString(buffer, buffer.position(), buffer.limit());
     }
 
     public static String toString(ByteBuffer buffer, int start, int end) {

@@ -17,7 +17,7 @@ public class DirectByteBufferFactory {
     private static final long addressOffset;
     private static final long capacityOffset;
     private static final long limitOffset;
-    public static final Unsafe unsafe = UnsafeAccess.UNSAFE;
+    private static final Unsafe unsafe = UnsafeAccess.UNSAFE;
 
     static {
         boolean tempAvailable = true;
@@ -54,7 +54,6 @@ public class DirectByteBufferFactory {
         DIRECT_BYTE_BUFFER_CLASS = tempDirectByteBufferClass;
     }
 
-
     public static ByteBuffer wrap(long address, int length) {
         try {
             ByteBuffer buffer = (ByteBuffer) unsafe.allocateInstance(DIRECT_BYTE_BUFFER_CLASS);
@@ -66,6 +65,22 @@ public class DirectByteBufferFactory {
         } catch (InstantiationException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static ByteBuffer slice(ByteBuffer bufferToSlice, ByteBuffer slice, int start, int length) {
+        assert bufferToSlice.isDirect();
+        assert slice.isDirect();
+        assert length <= bufferToSlice.capacity();
+        long startAddress = unsafe.getLong(bufferToSlice, addressOffset);
+
+        long sliceStartAddress = startAddress + start;
+
+        unsafe.putLong(slice, addressOffset, sliceStartAddress);
+        unsafe.putInt(slice, capacityOffset, length);
+        unsafe.putInt(slice, limitOffset, length);
+        slice.order(bufferToSlice.order());
+        slice.position(0);
+        return slice;
     }
 
 }

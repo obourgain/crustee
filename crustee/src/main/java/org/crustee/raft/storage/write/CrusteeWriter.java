@@ -1,19 +1,25 @@
 package org.crustee.raft.storage.write;
 
+import static java.nio.ByteBuffer.allocateDirect;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.slf4j.LoggerFactory.getLogger;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.stream.LongStream;
 import org.crustee.raft.storage.commitlog.CommitLog;
 import org.crustee.raft.storage.commitlog.SegmentFactory;
+import org.crustee.raft.storage.sstable.index.IndexWithSummary;
+import org.crustee.raft.storage.sstable.index.MmapIndexReader;
 import org.crustee.raft.storage.table.CrusteeTable;
 import org.slf4j.Logger;
 import com.lmax.disruptor.BlockingWaitStrategy;
@@ -27,8 +33,8 @@ public class CrusteeWriter {
 
     private static final Logger logger = getLogger(CrusteeWriter.class);
 
-    public static final int BENCH_COUNT = 10 * 1000 * 1000;
     public static final int WARMUP_COUNT = 100_000;
+    public static final int BENCH_COUNT = 2 * 1000 * 1000 + WARMUP_COUNT;
     public static final int KEY_SIZE = 16;
     public static final int VAlUE_SIZE = 200;
 
@@ -80,43 +86,92 @@ public class CrusteeWriter {
             throw new RuntimeException(e);
         }
         logger.info("did some warmup, now let's go for {} inserts", BENCH_COUNT);
-        long start = System.currentTimeMillis();
-        for (long l = 0; l < BENCH_COUNT; l++) {
-            publishEvent(producer, l);
+        {
+            long start = System.currentTimeMillis();
+            for (long l = 0; l < BENCH_COUNT; l++) {
+                publishEvent(producer, l);
+            }
+            long end = System.currentTimeMillis();
+            System.out.println("duration: " + (end - start));
         }
-        long end = System.currentTimeMillis();
-        System.out.println("duration: " + (end - start));
 
         disruptor.shutdown();
 
         try {
             // let some time to flush
-            SECONDS.sleep(20);
+            SECONDS.sleep(6);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
         logger.info("warming up reader");
-        for (long l = 0; l < 100; l++) {
-            long s = System.currentTimeMillis();
-            blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
-            long e = System.currentTimeMillis();
-            System.out.println((e - s) + " ms");
-        }
+        LongStream.range(0, 20_000)
+//                .parallel()
+                .forEach(l -> {
+                    long s = System.nanoTime();
+                    ByteBuffer key = allocateDirect(KEY_SIZE);
+                    SortedMap<ByteBuffer, ByteBuffer> row = crusteeTable.get(key.putLong(0, l));
+                    blackhole = row;
+                    long e = System.nanoTime();
+                    System.out.println((e - s) + " ns, found " + (row != null));
+                });
         logger.info("done warming");
 
         try {
-            SECONDS.sleep(1);
+            SECONDS.sleep(2);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
+        final LongAdder found = new LongAdder();
+        final LongAdder notFound = new LongAdder();
         int i = BENCH_COUNT;
-        logger.info("start reading {} ", i);
-        for (long l = 0; l < i; l++) {
-            blackhole = crusteeTable.get(ByteBuffer.allocate(KEY_SIZE).putLong(0, l));
+
+        {
+            logger.info("start reading {} existing keys", i);
+            long start = System.currentTimeMillis();
+            LongStream.range(0, i)
+//                    .parallel()
+                    .forEach(l -> {
+                        // this doesn't work with randomly sized keys, as we can't know what will be the size, maybe use a dedicated
+                        // Random instance with same seed to reproduce ?
+                        ByteBuffer key = allocateDirect(KEY_SIZE);
+                        SortedMap<ByteBuffer, ByteBuffer> result = crusteeTable.get(key.putLong(0, l));
+                        if(result == null) {
+                            notFound.increment();
+                        } else {
+                            found.increment();
+                        }
+                        blackhole = result;
+                    });
+
+            long end = System.currentTimeMillis();
+            long duration = end - start;
+            logger.info("done reading in {} ms, found {}, not found {}", duration, found, notFound);
         }
-        logger.info("done reading");
+
+        {
+            logger.info("start reading {} non existing keys", i);
+            long start = System.currentTimeMillis();
+            LongStream.range(0, i)
+//                    .parallel()
+                    .forEach(l -> {
+                        ByteBuffer key = allocateDirect(KEY_SIZE);
+                        SortedMap<ByteBuffer, ByteBuffer> result = crusteeTable.get(key.putLong(0, Long.MAX_VALUE - l));
+                if(result == null) {
+                    notFound.increment();
+                } else {
+                    found.increment();
+                }
+                blackhole = result;
+            });
+            long end = System.currentTimeMillis();
+            long duration = end - start;
+            logger.info("done reading in {} ms, found {}, not found {}", duration, found, notFound);
+        }
+
+        System.out.println("IndexWithSummary.readCount " + IndexWithSummary.readCount);
+        System.out.println("MmapIndexReader.globalScannedEntries " + MmapIndexReader.globalScannedEntries);
 
         System.exit(0);
     }
@@ -126,20 +181,20 @@ public class CrusteeWriter {
     private static void publishEvent(WriteEventProducer producer, long l) {
         int keySize = randomKeySize();
         int valueSize = randomValueSize();
-        ByteBuffer command = ByteBuffer.allocateDirect(keySize + valueSize);
+        ByteBuffer command = allocateDirect(keySize + valueSize);
         ByteBuffer key = (ByteBuffer) command.duplicate().limit(keySize);
-        ByteBuffer columnValue = ByteBuffer.allocateDirect(valueSize);
-        Map<ByteBuffer, ByteBuffer> value = Collections.singletonMap(ByteBuffer.allocate(keySize), columnValue);
-        key.putLong(0, 0);
+        ByteBuffer columnValue = allocateDirect(valueSize);
+        Map<ByteBuffer, ByteBuffer> value = Collections.singletonMap(allocateDirect(keySize), columnValue);
+        key.putLong(0, l);
         columnValue.putLong(0, l);
         producer.onWriteRequest(command, key, value);
     }
 
     private static int randomKeySize() {
-        double random = Math.random();
-        int result = (int) (8 * random) - 4 + KEY_SIZE;
-        return result;
-//        return KEY_SIZE;
+//        double random = Math.random();
+//        int result = (int) (8 * random) - 4 + KEY_SIZE;
+//        return result;
+        return KEY_SIZE;
     }
 
     private static int randomValueSize() {
