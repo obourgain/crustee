@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.Comparator;
 import org.slf4j.Logger;
+import com.google.common.primitives.Longs;
 import sun.misc.Cleaner;
 import sun.nio.ch.DirectBuffer;
 
@@ -33,7 +34,16 @@ public class ByteBufferUtils {
                 return 1;
             }
             // buffers have the same length, so this is safe
-            for (int i = 0; i < o1.limit(); i++) {
+            int longComparisons = o1.limit() & ~7;
+            int i = 0;
+            for (; i < longComparisons ; i += Longs.BYTES) {
+                int cmp = Long.compare(o1.getLong(i), o2.getLong(i));
+                if (cmp != 0) {
+                    return cmp;
+                }
+            }
+
+            for (; i < o1.limit(); i++) {
                 int cmp = Byte.compare(o1.get(i), o2.get(i));
                 if (cmp != 0) {
                     return cmp;
