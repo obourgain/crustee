@@ -1,3 +1,13 @@
 machine:
   java:
     version: oraclejdk8
+
+# circle ci tries to resolve dependenvies before the build but this doesn't work for
+# multi module maven builds, so we build without tests then rebuild with tests
+dependencies:
+ override:
+  - mvn install -DskipTests
+
+test:
+  override:
+  - mvn clean install
