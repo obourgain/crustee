@@ -33,10 +33,10 @@ public class CrusteeWriter {
 
     private static final Logger logger = getLogger(CrusteeWriter.class);
 
-    public static final int WARMUP_COUNT = 100_000;
-    public static final int BENCH_COUNT = 2 * 1000 * 1000 + WARMUP_COUNT;
-    public static final int KEY_SIZE = 16;
-    public static final int VAlUE_SIZE = 200;
+    private static final int WARMUP_COUNT = 100_000;
+    private static final int BENCH_COUNT = 10 * 1000 * 1000 + WARMUP_COUNT;
+    private static final int KEY_SIZE = 16;
+    private static final int VAlUE_SIZE = 200;
 
     // see https://github.com/LMAX-Exchange/disruptor/wiki/Getting-Started
 
@@ -176,7 +176,7 @@ public class CrusteeWriter {
         System.exit(0);
     }
 
-    static volatile Object blackhole;
+    private static volatile Object blackhole;
 
     private static void publishEvent(WriteEventProducer producer, long l) {
         int keySize = randomKeySize();

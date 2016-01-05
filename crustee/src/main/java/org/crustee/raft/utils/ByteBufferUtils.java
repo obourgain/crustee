@@ -25,14 +25,11 @@ public class ByteBufferUtils {
         public int compare(ByteBuffer o1, ByteBuffer o2) {
             assert o1.position() == 0 : "only works when buffer's position is 0";
             assert o2.position() == 0 : "only works when buffer's position is 0";
-            int o1Remaining = o1.remaining();
-            int o2Remaining = o2.remaining();
-            if (o1Remaining < o2Remaining) {
-                return -1;
+            int lengthDifference = o1.remaining() - o2.remaining();
+            if(lengthDifference != 0) {
+                return lengthDifference;
             }
-            if (o1Remaining > o2Remaining) {
-                return 1;
-            }
+
             // buffers have the same length, so this is safe
             int longComparisons = o1.limit() & ~7;
             int i = 0;
@@ -43,15 +40,48 @@ public class ByteBufferUtils {
                 }
             }
 
-            for (; i < o1.limit(); i++) {
-                int cmp = Byte.compare(o1.get(i), o2.get(i));
+            return compareBytes(o1, o2, i);
+        }
+    };
+
+    public static final Comparator<ByteBuffer> fooComparator = new Comparator<ByteBuffer>() {
+        @Override
+        public int compare(ByteBuffer o1, ByteBuffer o2) {
+            assert o1.position() == 0 : "only works when buffer's position is 0";
+            assert o2.position() == 0 : "only works when buffer's position is 0";
+            int lengthDifference = o1.remaining() - o2.remaining();
+            if(lengthDifference != 0) {
+                return lengthDifference;
+            }
+
+            // buffers have the same length, so this is safe
+            int intComparisons = o1.limit() & ~3;
+            int i = 0;
+            for (; i < intComparisons ; i += Integer.BYTES) {
+                // TODO should this be unsigned comparison ?
+                int cmp = Integer.compare(o1.getInt(i), o2.getInt(i));
                 if (cmp != 0) {
                     return cmp;
                 }
             }
-            return 0;
+
+            return compareBytes(o1, o2, i);
         }
     };
+
+    protected static int compareBytes(ByteBuffer o1, ByteBuffer o2, int startAt) {
+        for (int i = startAt; i < o1.limit(); i++) {
+            int cmp = compareUnsignedBytes(o1, o2, i);
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return 0;
+    }
+
+    protected static int compareUnsignedBytes(ByteBuffer o1, ByteBuffer o2, int i) {
+        return Integer.compare(Byte.toUnsignedInt(o1.get(i)), Byte.toUnsignedInt(o2.get(i)));
+    }
 
     public static boolean equals(ByteBuffer bb1, ByteBuffer bb2) {
         return equals(bb1, bb2, bb2.position(), bb2.limit());

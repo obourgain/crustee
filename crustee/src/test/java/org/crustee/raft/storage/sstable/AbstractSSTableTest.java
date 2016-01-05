@@ -10,6 +10,7 @@ import org.junit.rules.TemporaryFolder;
 
 public abstract class AbstractSSTableTest {
 
+    @SuppressWarnings("AccessCanBeTightened") // intellij is wrong here, do not make this private
     @FunctionalInterface
     protected interface Action {
         void run(SSTableWriter writer, File table, File index) throws IOException;

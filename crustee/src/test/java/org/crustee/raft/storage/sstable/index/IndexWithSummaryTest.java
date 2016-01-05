@@ -30,4 +30,10 @@ public class IndexWithSummaryTest {
         verify(indexSummary).previousIndexEntryLocation(key);
         verify(indexReader).findRowLocation(key, 42, 54);
     }
+
+    @Test
+    public void should_close_reader() throws Exception {
+        new IndexWithSummary(indexReader, indexSummary).close();
+        verify(indexReader).close();
+    }
 }

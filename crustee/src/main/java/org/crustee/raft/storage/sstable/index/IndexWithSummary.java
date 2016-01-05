@@ -9,7 +9,7 @@ public class IndexWithSummary implements IndexReader {
     private final InternalIndexReader delegate;
     private final TreeMapIndexSummary summary;
 
-    public IndexWithSummary(InternalIndexReader delegate, TreeMapIndexSummary summary) {
+    IndexWithSummary(InternalIndexReader delegate, TreeMapIndexSummary summary) {
         this.delegate = delegate;
         this.summary = summary;
     }

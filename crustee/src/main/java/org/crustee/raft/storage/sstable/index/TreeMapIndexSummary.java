@@ -6,17 +6,18 @@ import java.util.TreeMap;
 import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.utils.ByteBufferUtils;
 
-public class TreeMapIndexSummary {
+class TreeMapIndexSummary {
 
     private final int samplingInterval;
-    private final TreeMap<ByteBuffer, Integer> positions = new TreeMap<>(ByteBufferUtils.lengthFirstComparator());
+    @VisibleForTesting
+    final TreeMap<ByteBuffer, Integer> positions = new TreeMap<>(ByteBufferUtils.lengthFirstComparator());
 
-    public TreeMapIndexSummary(MmapIndexReader indexReader, int samplingInterval) {
+    TreeMapIndexSummary(MmapIndexReader indexReader, int samplingInterval) {
         this.samplingInterval = samplingInterval;
         load(indexReader);
     }
 
-    public int previousIndexEntryLocation(ByteBuffer key) {
+    int previousIndexEntryLocation(ByteBuffer key) {
         // there is a copy of the entry in TreeMap.floorEntry, we may be able to avoid the allocation if there is a way to return only the value
         Map.Entry<ByteBuffer, Integer> position = positions.floorEntry(key);
         if (position == null) {
@@ -26,12 +27,11 @@ public class TreeMapIndexSummary {
         return position.getValue();
     }
 
-    @VisibleForTesting
-    protected void load(MmapIndexReader indexReader) {
+    private void load(MmapIndexReader indexReader) {
         indexReader.iterate(this::filter, this::callback);
     }
 
-    private boolean filter(ByteBuffer byteBuffer, Integer integer) {
+    private boolean filter(ByteBuffer byteBuffer, int integer) {
         return integer % samplingInterval == 0;
     }
 
@@ -39,7 +39,7 @@ public class TreeMapIndexSummary {
         positions.put(key, position);
     }
 
-    public int getSamplingInterval() {
+    int getSamplingInterval() {
         return samplingInterval;
     }
 }
