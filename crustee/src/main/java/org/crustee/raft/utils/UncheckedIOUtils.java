@@ -4,6 +4,7 @@ import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
 import java.io.Closeable;
+import java.io.File;
 import java.io.Flushable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,7 +24,34 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileAttribute;
 
+@SuppressWarnings("AccessCanBeTightened")
 public class UncheckedIOUtils {
+
+    public interface Action {
+        void run() throws IOException;
+    }
+
+    public interface ConsumingAction<T> {
+        void run(T t) throws IOException;
+    }
+
+    public static void run(Action action) {
+        // take care of not using capturing lambdas to avoid allocations
+        try {
+            action.run();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public static <T> void run(T t, ConsumingAction<T> action) {
+        // take care of not using capturing lambdas to avoid allocations
+        try {
+            action.run(t);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     public static long write(GatheringByteChannel channel, ByteBuffer[] buffers) {
         try {
@@ -50,11 +78,7 @@ public class UncheckedIOUtils {
     }
 
     public static void flush(Flushable flushable) {
-        try {
-            flushable.flush();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        run(flushable::flush);
     }
 
     public static long read(ScatteringByteChannel channel, ByteBuffer[] buffers) {
@@ -82,11 +106,7 @@ public class UncheckedIOUtils {
     }
 
     public static void close(Closeable closeable) {
-        try {
-            closeable.close();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        run(closeable::close);
     }
 
     public static void fsync(FileChannel channel, boolean metadata) {
@@ -183,11 +203,7 @@ public class UncheckedIOUtils {
     }
 
     public static void delete(Path path) {
-        try {
-            Files.delete(path);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        run(path, Files::delete);
     }
 
     /**

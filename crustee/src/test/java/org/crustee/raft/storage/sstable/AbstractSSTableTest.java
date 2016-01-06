@@ -30,8 +30,8 @@ public abstract class AbstractSSTableTest {
                 action.run(writer, table, index);
             }
         } finally {
-            UncheckedIOUtils.delete(index.toPath());
-            UncheckedIOUtils.delete(table.toPath());
+            UncheckedIOUtils.run(index::delete);
+            UncheckedIOUtils.run(table::delete);
         }
     }
 

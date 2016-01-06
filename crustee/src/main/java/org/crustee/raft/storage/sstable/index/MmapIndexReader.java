@@ -11,18 +11,17 @@ import org.crustee.raft.storage.sstable.RowLocation;
 import org.crustee.raft.utils.ByteBufferUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
+import com.carrotsearch.hppc.predicates.ObjectIntPredicate;
 
 public class MmapIndexReader implements InternalIndexReader {
 
     private static final Logger logger = getLogger(MmapIndexReader.class);
 
-    private static final int SIZEOF_KEYSIZE_OFFSET_VALUESIZE = 2 + 8 + 4;
-
     private final MappedByteBuffer map;
     private final long indexFileSize;
     private volatile boolean closed = false;
 
-    public MmapIndexReader(Path index) {
+    MmapIndexReader(Path index) {
         map = UncheckedIOUtils.map(index);
         indexFileSize = map.limit();
     }
@@ -32,7 +31,6 @@ public class MmapIndexReader implements InternalIndexReader {
     /**
      * Find the offset where the value of the searched key is located in the SSTable file, or -1
      */
-    // TODO test these params
     public RowLocation findRowLocation(ByteBuffer searchedKey, int startAt, int maxScannedEntry) {
         assert searchedKey.limit() <= Short.MAX_VALUE : "key may not be longer than " + Short.MAX_VALUE + " bytes";
         assert startAt <= indexFileSize : "start searching at " + startAt + " but index file size is " + indexFileSize;
@@ -47,7 +45,7 @@ public class MmapIndexReader implements InternalIndexReader {
             short keySize = map.getShort(position);
             assert keySize >= 0;
             if (searchedKeySize != keySize) {
-                position += SIZEOF_KEYSIZE_OFFSET_VALUESIZE;
+                position += IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
                 position += keySize;
                 // the key size is not the same, don't even bother to compare those, go to next entry
                 continue;
@@ -73,8 +71,8 @@ public class MmapIndexReader implements InternalIndexReader {
      * The filter will be provided with a copy of the buffer. It must not attempt to modify it. If it modifies the {@link ByteBuffer#position}
      * or other {@link ByteBuffer} fields, it will receive the same ByteBuffer in the callback
      */
-    // TODO avoid allocating so many BB, and the boxing, it should basically be allocation-less if no entry match
-    public void iterate(BiPredicate<ByteBuffer, Integer> keyAndEntryIndexFilter, ObjIntConsumer<ByteBuffer> callback) {
+    // TODO avoid allocating so many BB, it should basically be allocation-less if no entry match
+    void iterate(ObjectIntPredicate<ByteBuffer> keyAndEntryIndexFilter, ObjIntConsumer<ByteBuffer> callback) {
 //        Cursor cursor = new Cursor();
 //
 //        while (cursor.hasNext()) {
@@ -91,16 +89,14 @@ public class MmapIndexReader implements InternalIndexReader {
             int tempPosition = position;
             short keySize = map.getShort(position);
             tempPosition += 2; // keySize
-//            long offset = map.getLong(position);
             tempPosition += 8; // offset
-//            int valueSize = map.getInt(position);
             tempPosition += 4; // key
 
             ByteBuffer dup = map.duplicate();
             dup.position(tempPosition).limit(tempPosition + keySize);
             ByteBuffer slice = dup.slice();
 
-            if (keyAndEntryIndexFilter.test(slice, indexEntry)) {
+            if (keyAndEntryIndexFilter.apply(slice, indexEntry)) {
                 callback.accept(slice, position);
             }
             position = tempPosition + keySize;
@@ -126,7 +122,7 @@ public class MmapIndexReader implements InternalIndexReader {
 
         private int currentEntrySize() {
             // total size
-            return SIZEOF_KEYSIZE_OFFSET_VALUESIZE + currentKeySize();
+            return IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH + currentKeySize();
         }
 
         private short currentKeySize() {
