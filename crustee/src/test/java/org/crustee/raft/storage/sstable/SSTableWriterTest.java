@@ -11,15 +11,16 @@ import java.nio.file.Path;
 import java.util.stream.IntStream;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
+import org.crustee.raft.storage.sstable.index.IndexWriter;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
 public class SSTableWriterTest extends AbstractSSTableTest {
 
-    static final int ROW_KEY_SIZE = 32;
-    static final int COLUMN_KEY_SIZE = 16;
-    static final int VALUE_SIZE = 100;
+    private static final int ROW_KEY_SIZE = 32;
+    private static final int COLUMN_KEY_SIZE = 16;
+    private static final int VALUE_SIZE = 100;
 
     @Test
     public void should_write_header() throws IOException {
@@ -60,7 +61,7 @@ public class SSTableWriterTest extends AbstractSSTableTest {
             long tableFileSize = table.length();
             assertThat(tableFileSize).isEqualTo(expectedTableSize);
 
-            long expectedIndexSize = entries * (ROW_KEY_SIZE + 2 + 8 + 4); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
+            long expectedIndexSize = entries * (ROW_KEY_SIZE + IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH); // the 8 is for the offset stored in the index, 2 is for key size + 4 for value size
             long indexFileSize = index.length();
             assertThat(indexFileSize).isEqualTo(expectedIndexSize);
 

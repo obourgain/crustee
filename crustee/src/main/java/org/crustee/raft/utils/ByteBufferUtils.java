@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.Comparator;
 import org.slf4j.Logger;
+import com.google.common.primitives.Longs;
 import sun.misc.Cleaner;
 import sun.nio.ch.DirectBuffer;
 
@@ -24,24 +25,38 @@ public class ByteBufferUtils {
         public int compare(ByteBuffer o1, ByteBuffer o2) {
             assert o1.position() == 0 : "only works when buffer's position is 0";
             assert o2.position() == 0 : "only works when buffer's position is 0";
-            int o1Remaining = o1.remaining();
-            int o2Remaining = o2.remaining();
-            if(o1Remaining < o2Remaining) {
-                return -1;
+            int lengthDifference = o1.remaining() - o2.remaining();
+            if (lengthDifference != 0) {
+                return lengthDifference;
             }
-            if(o1Remaining > o2Remaining) {
-                return 1;
-            }
+
             // buffers have the same length, so this is safe
-            for (int i = 0; i < o1.limit(); i++) {
-                int cmp = Byte.compare(o1.get(i), o2.get(i));
+            int longComparisons = o1.limit() & ~7;
+            int i = 0;
+            for (; i < longComparisons; i += Longs.BYTES) {
+                int cmp = Long.compare(o1.getLong(i), o2.getLong(i));
                 if (cmp != 0) {
                     return cmp;
                 }
             }
-            return 0;
+
+            return compareBytes(o1, o2, i);
         }
     };
+
+    protected static int compareBytes(ByteBuffer o1, ByteBuffer o2, int startAt) {
+        for (int i = startAt; i < o1.limit(); i++) {
+            int cmp = compareUnsignedBytes(o1, o2, i);
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return 0;
+    }
+
+    protected static int compareUnsignedBytes(ByteBuffer o1, ByteBuffer o2, int i) {
+        return Integer.compare(Byte.toUnsignedInt(o1.get(i)), Byte.toUnsignedInt(o2.get(i)));
+    }
 
     public static boolean equals(ByteBuffer bb1, ByteBuffer bb2) {
         return equals(bb1, bb2, bb2.position(), bb2.limit());
@@ -54,13 +69,13 @@ public class ByteBufferUtils {
     public static boolean equals(ByteBuffer bb1, int start1, int end1, ByteBuffer bb2, int start2, int end2) {
         int length1 = end1 - start1;
         int length2 = end2 - start2;
-        if(length1 != length2) {
+        if (length1 != length2) {
             return false;
         }
         for (int i = 0; i < length1; i++) {
             byte b1 = bb1.get(i + start1);
             byte b2 = bb2.get(i + start2);
-            if(b1 != b2) {
+            if (b1 != b2) {
                 return false;
             }
         }
@@ -82,12 +97,12 @@ public class ByteBufferUtils {
     }
 
     public static boolean tryUnmap(MappedByteBuffer byteBuffer) {
-        if(!DIRECT_BUFFER_CLEANING_ACTIVATED) {
+        if (!DIRECT_BUFFER_CLEANING_ACTIVATED) {
             return false;
         }
         try {
             Cleaner cleaner = ((DirectBuffer) byteBuffer).cleaner();
-            if(cleaner != null) {
+            if (cleaner != null) {
                 cleaner.clean();
             } else {
                 logger.info("No cleaner for {}", byteBuffer.getClass());
@@ -101,6 +116,10 @@ public class ByteBufferUtils {
 
     public static Comparator<ByteBuffer> lengthFirstComparator() {
         return lengthFirstComparator;
+    }
+
+    public static String toString(ByteBuffer buffer) {
+        return toString(buffer, buffer.position(), buffer.limit());
     }
 
     public static String toString(ByteBuffer buffer, int start, int end) {

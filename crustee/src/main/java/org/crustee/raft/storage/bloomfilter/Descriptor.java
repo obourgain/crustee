@@ -2,7 +2,6 @@ package org.crustee.raft.storage.bloomfilter;
 
 import static java.util.Objects.requireNonNull;
 import java.nio.ByteBuffer;
-import org.jetbrains.annotations.NotNull;
 import com.google.common.base.Preconditions;
 
 class Descriptor {
@@ -16,8 +15,8 @@ class Descriptor {
     ;
 
     private final int version;
-    @NotNull private final HashFunction hashFunction1;
-    @NotNull private final HashFunction hashFunction2;
+    private final HashFunction hashFunction1;
+    private final HashFunction hashFunction2;
     private final long seed1;
     private final long seed2;
     private final int hashFunctionCount;
@@ -84,12 +83,10 @@ class Descriptor {
         );
     }
 
-    @NotNull
     public HashFunction getHashFunction1() {
         return hashFunction1;
     }
 
-    @NotNull
     public HashFunction getHashFunction2() {
         return hashFunction2;
     }

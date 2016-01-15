@@ -24,6 +24,8 @@ public class Serializer {
     }
 
     public static SerializedRow serialize(Row row) {
+        // TODO avoid allocating
+        // TODO serialize to Channel to avoid retaining state
         Map<ByteBuffer, ByteBuffer> map = row.asMap();
         ByteBuffer[] buffers = new ByteBuffer[map.size() * 3 + 1];
         buffers[0] = ByteBuffer.allocate(ENTRY_COUNT_SIZE).putInt(0, map.size());

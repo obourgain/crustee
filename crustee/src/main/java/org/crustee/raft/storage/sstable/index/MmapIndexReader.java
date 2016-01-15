@@ -5,39 +5,47 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.file.Path;
+import java.util.function.BiPredicate;
+import java.util.function.ObjIntConsumer;
 import org.crustee.raft.storage.sstable.RowLocation;
 import org.crustee.raft.utils.ByteBufferUtils;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
+import com.carrotsearch.hppc.predicates.ObjectIntPredicate;
 
-public class MmapIndexReader implements IndexReader {
+public class MmapIndexReader implements InternalIndexReader {
 
     private static final Logger logger = getLogger(MmapIndexReader.class);
 
     private final MappedByteBuffer map;
-    private final long indexFileSize;
+    final long indexFileSize;
     private volatile boolean closed = false;
 
-    public MmapIndexReader(Path index) {
+    MmapIndexReader(Path index) {
         map = UncheckedIOUtils.map(index);
         indexFileSize = map.limit();
     }
 
+    public static long globalScannedEntries = 0;
+
     /**
      * Find the offset where the value of the searched key is located in the SSTable file, or -1
      */
-    public RowLocation findRowLocation(ByteBuffer searchedKey) {
+    public RowLocation findRowLocation(ByteBuffer searchedKey, int startAt, int maxScannedEntry) {
         assert searchedKey.limit() <= Short.MAX_VALUE : "key may not be longer than " + Short.MAX_VALUE + " bytes";
+        assert startAt <= indexFileSize : "start searching at " + startAt + " but index file size is " + indexFileSize;
 
         short searchedKeySize = (short) searchedKey.limit();
-        int sizeOf_KeySize_Offset_ValueSize = 2 + 8 + 4;
 
-        int position = 0;
+        int position = startAt;
+        int entriesScanned = 0;
         // TODO what if the file is corrupted and have wrong size ?
-        while (position < indexFileSize) {
+        while (position < indexFileSize && entriesScanned < maxScannedEntry) {
+            globalScannedEntries++;
             short keySize = map.getShort(position);
+            assert keySize >= 0;
             if (searchedKeySize != keySize) {
-                position += sizeOf_KeySize_Offset_ValueSize;
+                position += IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
                 position += keySize;
                 // the key size is not the same, don't even bother to compare those, go to next entry
                 continue;
@@ -52,8 +60,89 @@ public class MmapIndexReader implements IndexReader {
                 return new RowLocation(keySize, offset, valueSize);
             }
             position += keySize;
+            entriesScanned++;
         }
         return RowLocation.NOT_FOUND;
+    }
+
+    /**
+     * Traverse this index file and for each entry apply the given filter. If the entry matches the filter, the callback
+     * is called with the index value.
+     * The filter will be provided with a copy of the buffer. It must not attempt to modify it. If it modifies the {@link ByteBuffer#position}
+     * or other {@link ByteBuffer} fields, it will receive the same ByteBuffer in the callback
+     */
+    // TODO avoid allocating so many BB, it should basically be allocation-less if no entry match
+    void iterate(ObjectIntPredicate<ByteBuffer> keyAndEntryIndexFilter, ObjIntConsumer<ByteBuffer> callback) {
+//        Cursor cursor = new Cursor();
+//
+//        while (cursor.hasNext()) {
+//            cursor.moveToNext();
+//            if(cursor.accept(keyAndEntryIndexFilter)) {
+//                callback.accept(cursor.currentEntryKeyBuffer(), cursor.position);
+//            }
+//        }
+
+        int indexEntry = 0;
+        int position = 0;
+        // TODO what if the file is corrupted and have wrong size ?
+        while (position < indexFileSize) {
+            int tempPosition = position;
+            short keySize = map.getShort(position);
+            tempPosition += 2; // keySize
+            tempPosition += 8; // offset
+            tempPosition += 4; // key
+
+            ByteBuffer dup = map.duplicate();
+            dup.position(tempPosition).limit(tempPosition + keySize);
+            ByteBuffer slice = dup.slice();
+
+            if (keyAndEntryIndexFilter.apply(slice, indexEntry)) {
+                callback.accept(slice, position);
+            }
+            position = tempPosition + keySize;
+            indexEntry++;
+        }
+    }
+
+    private class Cursor {
+        // position in bytes
+        private int position = 0;
+        // position in entries count
+        private int index = 0;
+        private ByteBuffer current = null;
+
+        private ByteBuffer currentEntryKeyBuffer() {
+            if(current == null) {
+                ByteBuffer dup = map.duplicate();
+                dup.position(position).limit(position + currentKeySize());
+                current = dup.slice();
+            }
+            return current;
+        }
+
+        private int currentEntrySize() {
+            // total size
+            return IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH + currentKeySize();
+        }
+
+        private short currentKeySize() {
+            assert hasNext();
+            return map.getShort(position);
+        }
+
+        private boolean hasNext() {
+            return position < MmapIndexReader.this.indexFileSize;
+        }
+
+        private void moveToNext() {
+            index++;
+            position += currentEntrySize();
+            current = null;
+        }
+
+        public boolean accept(BiPredicate<ByteBuffer, Integer> keyAndEntryIndexFilter) {
+            return keyAndEntryIndexFilter.test(currentEntryKeyBuffer(), index);
+        }
     }
 
     @Override

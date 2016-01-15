@@ -7,27 +7,19 @@ import static org.crustee.raft.utils.UncheckedIOUtils.openChannel;
 import static org.crustee.raft.utils.UncheckedIOUtils.position;
 import static org.crustee.raft.utils.UncheckedIOUtils.size;
 import static org.slf4j.LoggerFactory.getLogger;
-import java.io.Flushable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.GatheringByteChannel;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Iterator;
-import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.bloomfilter.BloomFilter;
 import org.crustee.raft.storage.memtable.ReadOnlyMemtable;
 import org.crustee.raft.storage.row.Row;
-import org.crustee.raft.utils.ByteBufferUtils;
+import org.crustee.raft.storage.sstable.index.IndexWriter;
 import org.crustee.raft.utils.UncheckedIOUtils;
 import org.slf4j.Logger;
 import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.LongArrayList;
-import com.carrotsearch.hppc.cursors.IntCursor;
-import com.carrotsearch.hppc.cursors.LongCursor;
 
 public class SSTableWriter implements AutoCloseable {
 
@@ -46,8 +38,8 @@ public class SSTableWriter implements AutoCloseable {
     private final LongArrayList valuesOffsets;
     private final IntArrayList entriesSize;
 
-    protected SSTableHeader header;
-    protected State completedState = State.NOTHING;
+    SSTableHeader header;
+    State completedState = State.NOTHING;
 
     private long offset = 0;
 
@@ -84,7 +76,10 @@ public class SSTableWriter implements AutoCloseable {
         completedState = State.TEMPORAY_HEADER;
         writeTable();
         completedState = State.TABLE;
-        writeIndex();
+
+        // no need to close the index writer, we close its resources when closing the SSTableWriter
+        IndexWriter indexWriter = new IndexWriter(memtable, valuesOffsets, entriesSize, indexBuffer);
+        indexWriter.write();
         completedState = State.INDEX;
 
         // We flush right now because if a sstable reader is created from this writer and exposed to
@@ -96,7 +91,7 @@ public class SSTableWriter implements AutoCloseable {
         writeCompletedHeader();
         completedState = State.COMPLETE_HEADER;
 
-        // put the bloom filter next to the index
+        // put the bloom filter next to the index, if it is moved in an other directory, this dir will need to be fsync'ed separately
         Path bloomFilterPath = index.resolveSibling(index.getFileName() + ".bf");
         UncheckedIOUtils.createFile(bloomFilterPath);
         try (FileChannel bloomFilterChannel = openChannel(bloomFilterPath, WRITE)) {
@@ -117,14 +112,14 @@ public class SSTableWriter implements AutoCloseable {
         completedState = State.SYNCED;
     }
 
-    protected void writeTemporaryHeader() {
+    void writeTemporaryHeader() {
         assert completedState == State.NOTHING;
         ByteBuffer header = this.header.asTemporaryByteBuffer();
         UncheckedIOUtils.write(tableChannel, header); // updates position in the channel
         offset += SSTableHeader.BUFFER_SIZE;
     }
 
-    protected void writeCompletedHeader() {
+    void writeCompletedHeader() {
         assert completedState == State.INDEX;
         ByteBuffer header = this.header.complete(size(tableChannel)).asCompletedByteBuffer();
         UncheckedIOUtils.write(tableChannel, header, 0); // doesn't update position in the channel
@@ -144,14 +139,13 @@ public class SSTableWriter implements AutoCloseable {
      * n bytes for the key
      * m bytes for the value
      */
-    protected void writeTableEntry(ByteBuffer key, Row value) {
+    void writeTableEntry(ByteBuffer key, Row value) {
         assert key.limit() <= Short.MAX_VALUE;
         assert key.position() == 0;
 
         SerializedRow serializedRow = Serializer.serialize(value);
         int totalSize = serializedRow.totalSize();
 
-//        ByteBuffer keyValueLengthBuffer = ByteBuffer.allocate(2 + 4);
         ByteBuffer keyValueLengthBuffer = tableBuffer.getPreallocatedBuffer();
         assert keyValueLengthBuffer.position() == 0;
         assert keyValueLengthBuffer.limit() == TABLE_ENTRY_KEY_VALUE_LENGTH;
@@ -170,41 +164,6 @@ public class SSTableWriter implements AutoCloseable {
         bloomFilter.add(key);
     }
 
-    private void writeIndex() {
-        assert completedState == State.TABLE;
-        Iterator<LongCursor> offsets = valuesOffsets.iterator();
-        Iterator<IntCursor> sizes = entriesSize.iterator();
-        memtable.applyInOrder((k, v) -> {
-            ByteBuffer keySizeOffsetAndValueSize = indexBuffer.getPreallocatedBuffer();
-            assert keySizeOffsetAndValueSize.position() == 0;
-            assert keySizeOffsetAndValueSize.limit() == INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
-            assert offsets.hasNext();
-            assert sizes.hasNext();
-            long nextOffset = offsets.next().value;
-            int nextEntrySize = sizes.next().value;
-            writeIndexEntry(k, keySizeOffsetAndValueSize, nextOffset, nextEntrySize);
-        });
-    }
-
-    /**
-     * Index entry on disk format is :
-     * 2 bytes for the row key size (n)
-     * 8 bytes for the offset at which the target row starts in the table file
-     * 4 bytes for the value size
-     * n bytes for the row key
-     */
-    private void writeIndexEntry(ByteBuffer key, ByteBuffer keySizeOffsetAndValueSize, long nextOffset, int serializedValueSize) {
-        assert key.limit() <= Short.MAX_VALUE;
-        keySizeOffsetAndValueSize.clear();
-
-        keySizeOffsetAndValueSize.putShort((short) key.limit())
-                .putLong(nextOffset)
-                .putInt(serializedValueSize)
-                .flip();
-        UncheckedIOUtils.write(indexBuffer, keySizeOffsetAndValueSize);
-        UncheckedIOUtils.write(indexBuffer, (ByteBuffer) key.duplicate().position(0));
-    }
-
     public void close() {
         // also closes the files
         UncheckedIOUtils.close(indexBuffer);
@@ -221,7 +180,7 @@ public class SSTableWriter implements AutoCloseable {
         super.finalize();
     }
 
-    protected enum State {
+    enum State {
         NOTHING,
         TEMPORAY_HEADER,
         TABLE,
@@ -231,113 +190,4 @@ public class SSTableWriter implements AutoCloseable {
         CLOSED
     }
 
-    private static class BufferingChannel implements GatheringByteChannel, Flushable {
-
-        public static final int BUFFERED_CHANNEL_BUFFER_SIZE = 256;
-
-        private final FileChannel delegate;
-        private final ByteBuffer[] buffer = new ByteBuffer[BUFFERED_CHANNEL_BUFFER_SIZE];
-        private int bufferIndex = 0;
-        private final TemporaryMetadataBufferSlab temporaryMetadataBufferSlab;
-
-        // this class is highly specific to the use case here because we have the buffering over
-        // a channel but also a cache of pre allocated buffers of a specific size, used here to
-        // write the fixed-size part of the entries
-        private BufferingChannel(FileChannel delegate, int preallocatedBufferSize) {
-            this.delegate = delegate;
-            this.temporaryMetadataBufferSlab = new TemporaryMetadataBufferSlab(BUFFERED_CHANNEL_BUFFER_SIZE, preallocatedBufferSize);
-        }
-
-        public ByteBuffer getPreallocatedBuffer() {
-            return temporaryMetadataBufferSlab.get();
-        }
-
-        @Override
-        public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-            long sum = 0;
-            for (int i = offset; i < offset + length; i++) {
-                sum += write(srcs[i]);
-            }
-            return sum;
-        }
-
-        @Override
-        public long write(ByteBuffer[] srcs) throws IOException {
-            return write(srcs, 0, srcs.length);
-        }
-
-        @Override
-        public int write(ByteBuffer src) throws IOException {
-            int limit = src.limit();
-            buffer[bufferIndex] = src;
-            bufferIndex++;
-            if(bufferIndex == buffer.length) {
-                flush();
-            }
-            return limit;
-        }
-
-        @Override
-        public boolean isOpen() {
-            return delegate.isOpen();
-        }
-
-        public void flush() throws IOException {
-            if(bufferIndex != 0) {
-                delegate.write(buffer, 0, bufferIndex);
-                bufferIndex = 0; // no need to clear the array as the ByteBuffers are already referenced in the memtable, so no garbage is kept
-                temporaryMetadataBufferSlab.reset();
-            }
-
-        }
-        @Override
-        public void close() throws IOException {
-            if(bufferIndex != 0) {
-                throw new IllegalStateException("Write buffer have not been flushed before closing it");
-            }
-            delegate.close();
-            temporaryMetadataBufferSlab.close();
-        }
-    }
-
-    @VisibleForTesting
-    protected static class TemporaryMetadataBufferSlab {
-
-        // allocate a single chunk of direct memory and slice it in small parts for the metadata of each of the entries to write
-
-        protected final ByteBuffer[] buffers;
-        private int index = 0;
-        private final MappedByteBuffer slab;
-
-        private boolean closed = false;
-
-        TemporaryMetadataBufferSlab(int count, int size) {
-            this.buffers = new ByteBuffer[count];
-            slab = (MappedByteBuffer) ByteBuffer.allocateDirect(size * count);
-            for (int i = 0; i < buffers.length; i++) {
-                slab.position(i* size);
-                buffers[i] = (ByteBuffer) slab.slice().limit(size);
-            }
-        }
-
-        ByteBuffer get() {
-            assert !closed;
-            assert index < buffers.length;
-            return buffers[index++];
-        }
-
-        void reset() {
-            assert !closed;
-            index = 0;
-            for (ByteBuffer buffer : buffers) {
-                buffer.position(0);
-            }
-        }
-
-        void close() {
-            Arrays.fill(buffers, null);
-            ByteBufferUtils.tryUnmap(slab);
-            closed = true;
-        }
-    }
 }

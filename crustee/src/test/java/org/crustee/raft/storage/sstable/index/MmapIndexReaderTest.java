@@ -51,7 +51,7 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
                         assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
                         assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
                         int expectedOffset = SSTableHeader.BUFFER_SIZE + 10 * (
-                                +2 // key size
+                                2 // key size
                                         + 4 // value size
                                         + searchedKey.limit() // key
                                         + Serializer.serializedSizeOverhead(1) + 2 * 4 // value
@@ -72,10 +72,64 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
     }
 
     @Test
+    public void should_find_correct_offsets_with_keys_of_different_sizes() throws Exception {
+        test(memtable_differentKeySizes(), this::initSstable,
+                (writer, table, index) -> {
+
+                    try (IndexReader reader = IndexReaderFactory.create(index.toPath())) {
+                        ByteBuffer searchedKey = ByteBuffer.allocate(1).put(0, (byte) 0);
+                        RowLocation rowLocation = reader.findRowLocation(searchedKey);
+
+                        assertThat(rowLocation.isFound());
+                        assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
+                        assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
+                        assertThat(rowLocation.getOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE);
+                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
+                                + 2 // key size
+                                + 4 // value size
+                        );
+                        assertThat(rowLocation.getValueOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
+                                + 2 // key size
+                                + 4 // value size
+                                + searchedKey.limit() // key
+                        );
+                    }
+                },
+                (writer, table, index) -> {
+
+                    try (IndexReader reader = IndexReaderFactory.create(index.toPath())) {
+                        ByteBuffer searchedKey = ByteBuffer.allocate(10 + 1).put(0, (byte) 10);
+                        RowLocation rowLocation = reader.findRowLocation(searchedKey);
+
+                        assertThat(rowLocation.isFound());
+                        assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
+                        assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
+                        int expectedOffset = SSTableHeader.BUFFER_SIZE + 10 * (
+                                2 // key size
+                                        + 4 // value size
+                                        + Serializer.serializedSizeOverhead(1) + 2 * 4 // value
+                        )
+                                + IntStream.range(0, 10).map(i -> i + 1).sum(); // keys of increasing sizes;
+
+                        assertThat(rowLocation.getOffset()).isEqualTo(expectedOffset);
+                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(expectedOffset
+                                + 2 // key size
+                                + 4 // value size
+                        );
+                        assertThat(rowLocation.getValueOffset()).isEqualTo(expectedOffset
+                                + 2 // key size
+                                + 4 // value size
+                                + searchedKey.limit() // key
+                        );
+                    }
+                });
+    }
+
+    @Test
     public void should_return_not_found() throws Exception {
         test(memtable(), this::initSstable,
                 (writer, table, index) -> {
-                    try(IndexReader reader = IndexReaderFactory.create(index.toPath())) {
+                    try (IndexReader reader = IndexReaderFactory.create(index.toPath())) {
                         ByteBuffer searchedKey = ByteBuffer.allocate(4).putShort(0, Short.MAX_VALUE);
                         RowLocation rowLocation = reader.findRowLocation(searchedKey);
                         Assertions.assertThat(rowLocation.isFound()).isFalse();
@@ -106,6 +160,17 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
         IntStream.range(0, 100)
                 .forEach(i ->
                         memtable.insert(ByteBuffer.allocate(4).putShort(0, (short) i),
+                                singletonMap(
+                                        ByteBuffer.allocate(4).putInt(0, i),
+                                        ByteBuffer.allocate(4).putInt(0, i))));
+        return memtable;
+    }
+
+    private WritableMemtable memtable_differentKeySizes() {
+        LockFreeBTreeMemtable memtable = new LockFreeBTreeMemtable(1L);
+        IntStream.range(0, 100)
+                .forEach(i ->
+                        memtable.insert(ByteBuffer.allocate(i + 1).put(0, (byte) i),
                                 singletonMap(
                                         ByteBuffer.allocate(4).putInt(0, i),
                                         ByteBuffer.allocate(4).putInt(0, i))));
