@@ -6,35 +6,34 @@ import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.storage.bloomfilter.bitset.DirectByteBufferFactory;
 import org.crustee.raft.utils.ByteBufferUtils;
 import com.carrotsearch.hppc.IntArrayList;
-import uk.co.real_logic.agrona.UnsafeAccess;
+import uk.co.real_logic.agrona.BitUtil;
 import uk.co.real_logic.agrona.concurrent.UnsafeBuffer;
 
 // TODO use ints or long for pointer to index ? or said differently, should be allow an index larger than 2 GB ?
-class FlatIndexSummary implements IndexSummary {
+class FlatIndexSummary implements IndexSummary, AutoCloseable {
 
     private final int samplingInterval;
     private final ByteBuffer memory;
     // TODO convert to off heap
-    // TODO inline in the memory
     @VisibleForTesting
     final IntArrayList positions;
 
     private FlatIndexSummary(ByteBuffer memory, IntArrayList positions, int samplingInterval) {
         this.memory = memory;
         this.positions = positions;
-        this.samplingInterval = samplingInterval;
+        this.samplingInterval = BitUtil.findNextPositivePowerOfTwo(samplingInterval);
     }
 
     @Override
     public int previousIndexEntryLocation(ByteBuffer key) {
         int keyPosition = binarySearch(0, positions.size(), key, ByteBufferUtils.lengthFirstComparator());
-        if(keyPosition >= 0) {
+        if (keyPosition >= 0) {
             // found !
             return (int) pointerToIndexEntry(keyPosition);
         }
         // -1 to reverse the binary search negative value which is offset by one to handle the 0 case,
         // and another -1 to take the flooring entry
-        return (int) pointerToIndexEntry(- keyPosition - 1 - 1);
+        return (int) pointerToIndexEntry(-keyPosition - 1 - 1);
     }
 
     // JDK binary search without range check
@@ -53,12 +52,13 @@ class FlatIndexSummary implements IndexSummary {
             ByteBuffer midVal = DirectByteBufferFactory.slice(memory, currentKey, start, length);
 
             int cmp = c.compare(midVal, key);
-            if (cmp < 0)
+            if (cmp < 0) {
                 low = mid + 1;
-            else if (cmp > 0)
+            } else if (cmp > 0) {
                 high = mid - 1;
-            else
+            } else {
                 return mid; // key found
+            }
         }
         return -(low + 1);  // key not found.
     }
@@ -105,6 +105,11 @@ class FlatIndexSummary implements IndexSummary {
         return new Builder(indexReader, samplingInterval);
     }
 
+    @Override
+    public void close() throws Exception {
+        DirectByteBufferFactory.free(memory);
+    }
+
     static class Builder {
 
         private final MmapIndexReader indexReader;
@@ -122,8 +127,7 @@ class FlatIndexSummary implements IndexSummary {
             this.samplingInterval = samplingInterval;
 
             int presizingEstimate = presizeEstimation(indexReader, samplingInterval);
-            long address = UnsafeAccess.UNSAFE.allocateMemory(presizingEstimate);
-            ByteBuffer byteBuffer = DirectByteBufferFactory.wrap(address, presizingEstimate);
+            ByteBuffer byteBuffer = DirectByteBufferFactory.allocate(presizingEstimate);
             this.memory = new UnsafeBuffer(byteBuffer);
         }
 
@@ -134,8 +138,9 @@ class FlatIndexSummary implements IndexSummary {
             indexReader.iterate(this::filter, this::callback);
         }
 
-        private boolean filter(ByteBuffer byteBuffer, int integer) {
-            return integer % samplingInterval == 0;
+        private boolean filter(ByteBuffer byteBuffer, int index) {
+            // same as index % samplingInterval == 0 with samplingInterval a power of 2
+            return (index & (samplingInterval - 1)) == 0;
         }
 
         private void callback(ByteBuffer key, int position) {
@@ -155,20 +160,16 @@ class FlatIndexSummary implements IndexSummary {
             int currentFree = currentCapacity - memoryPosition;
             int requiredStorage = key.limit() + Long.BYTES; // long is position in index file
             if (currentFree <= requiredStorage) {
-                long address = memory.addressOffset();
                 // TODO do better estimate based on what has already been read, or maybe with an histogram of key sizes in index file ?
                 int presizingEstimate = presizeEstimation(indexReader, samplingInterval);
                 int newSize = currentCapacity + presizingEstimate;
-                long newAddress = UnsafeAccess.UNSAFE.reallocateMemory(address, newSize);
-                DirectByteBufferFactory.wrap(memory.byteBuffer(), newAddress, newSize);
+                DirectByteBufferFactory.reallocate(memory.byteBuffer(), newSize);
             }
         }
 
         private void truncate() {
             // release unused memory at the end of the buffer
-            long address = memory.addressOffset();
-            long newAddress = UnsafeAccess.UNSAFE.reallocateMemory(address, memoryPosition);
-            DirectByteBufferFactory.wrap(memory.byteBuffer(), newAddress, memoryPosition);
+            DirectByteBufferFactory.reallocate(memory.byteBuffer(), memoryPosition);
             // rewrap the buffer so the UnsafeBuffer can update its capacity
             memory.wrap(memory.byteBuffer());
         }
@@ -180,4 +181,14 @@ class FlatIndexSummary implements IndexSummary {
         }
     }
 
+    public static void main(String[] args) {
+        FlatIndexSummary summary = new FlatIndexSummary(null, null, 128);
+        for (int i = 0; i < 100000; i++) {
+            summary.filter(i);
+        }
+    }
+
+    private boolean filter(int integer) {
+        return integer % samplingInterval == 0;
+    }
 }

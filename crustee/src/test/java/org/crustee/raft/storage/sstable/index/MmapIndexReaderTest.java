@@ -17,6 +17,8 @@ import org.junit.Test;
 
 public class MmapIndexReaderTest extends AbstractSSTableTest {
 
+    static final int KEY_SIZE_AND_VALUE_SIZE = 2 + 4;
+
     @Test
     public void should_find_correct_offsets() throws Exception {
         test(memtable(), this::initSstable,
@@ -30,13 +32,10 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
                         assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
                         assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
                         assertThat(rowLocation.getOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE);
-                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
-                                + 2 // key size
-                                + 4 // value size
+                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE + KEY_SIZE_AND_VALUE_SIZE
                         );
                         assertThat(rowLocation.getValueOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
-                                + 2 // key size
-                                + 4 // value size
+                                + KEY_SIZE_AND_VALUE_SIZE
                                 + searchedKey.limit() // key
                         );
                     }
@@ -51,20 +50,15 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
                         assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
                         assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
                         int expectedOffset = SSTableHeader.BUFFER_SIZE + 10 * (
-                                2 // key size
-                                        + 4 // value size
+                                KEY_SIZE_AND_VALUE_SIZE
                                         + searchedKey.limit() // key
                                         + Serializer.serializedSizeOverhead(1) + 2 * 4 // value
                         );
 
                         assertThat(rowLocation.getOffset()).isEqualTo(expectedOffset);
-                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(expectedOffset
-                                + 2 // key size
-                                + 4 // value size
-                        );
+                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(expectedOffset + KEY_SIZE_AND_VALUE_SIZE );
                         assertThat(rowLocation.getValueOffset()).isEqualTo(expectedOffset
-                                + 2 // key size
-                                + 4 // value size
+                                + KEY_SIZE_AND_VALUE_SIZE
                                 + searchedKey.limit() // key
                         );
                     }
@@ -84,13 +78,9 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
                         assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
                         assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
                         assertThat(rowLocation.getOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE);
-                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
-                                + 2 // key size
-                                + 4 // value size
-                        );
+                        assertThat(rowLocation.getRowKeyOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE + KEY_SIZE_AND_VALUE_SIZE);
                         assertThat(rowLocation.getValueOffset()).isEqualTo(SSTableHeader.BUFFER_SIZE
-                                + 2 // key size
-                                + 4 // value size
+                                + KEY_SIZE_AND_VALUE_SIZE
                                 + searchedKey.limit() // key
                         );
                     }
@@ -104,10 +94,7 @@ public class MmapIndexReaderTest extends AbstractSSTableTest {
                         assertThat(rowLocation.isFound());
                         assertThat((int) rowLocation.getRowKeySize()).isEqualTo(searchedKey.limit());
                         assertThat((int) rowLocation.getValueSize()).isEqualTo(Serializer.serializedSizeOverhead(1) + 2 * 4);
-                        int expectedOffset = SSTableHeader.BUFFER_SIZE + 10 * (
-                                2 // key size
-                                        + 4 // value size
-                                        + Serializer.serializedSizeOverhead(1) + 2 * 4 // value
+                        int expectedOffset = SSTableHeader.BUFFER_SIZE + 10 * (KEY_SIZE_AND_VALUE_SIZE + Serializer.serializedSizeOverhead(1) + 2 * 4 // value
                         )
                                 + IntStream.range(0, 10).map(i -> i + 1).sum(); // keys of increasing sizes;
 

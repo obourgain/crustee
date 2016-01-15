@@ -13,7 +13,6 @@ import com.carrotsearch.hppc.cursors.LongCursor;
 
 public class IndexWriter {
 
-    @VisibleForTesting
     public static final int INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH = Short.BYTES + Long.BYTES + Integer.BYTES;
 
     private final ReadOnlyMemtable memtable;

@@ -83,6 +83,21 @@ public class DirectByteBufferFactory {
         }
     }
 
+    public static ByteBuffer allocate(int size) {
+        try {
+            long address = UnsafeAccess.UNSAFE.allocateMemory(size);
+            ByteBuffer buffer = (ByteBuffer) unsafe.allocateInstance(DIRECT_BYTE_BUFFER_CLASS);
+            unsafe.putLong(buffer, addressOffset, address);
+            unsafe.putInt(buffer, capacityOffset, size);
+            unsafe.putInt(buffer, limitOffset, size);
+            unsafe.putObject(buffer, attOffset, MARKER);
+            buffer.order(ByteOrder.nativeOrder());
+            return buffer;
+        } catch (InstantiationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static ByteBuffer wrap(long address, int length) {
         try {
             ByteBuffer buffer = (ByteBuffer) unsafe.allocateInstance(DIRECT_BYTE_BUFFER_CLASS);
@@ -120,6 +135,18 @@ public class DirectByteBufferFactory {
         slice.order(bufferToSlice.order());
         slice.position(0);
         return slice;
+    }
+
+    public static void free(ByteBuffer buffer) {
+        checkAllocatedHere(buffer);
+        UnsafeAccess.UNSAFE.freeMemory(((DirectBuffer) buffer).address());
+    }
+
+    public static ByteBuffer reallocate(ByteBuffer buffer, int newSize) {
+        checkAllocatedHere(buffer);
+        long currentAddress = ((DirectBuffer) buffer).address();
+        long newAddress = UnsafeAccess.UNSAFE.reallocateMemory(currentAddress, newSize);
+        return wrap(buffer, newAddress, newSize);
     }
 
     private static void checkAllocatedHere(ByteBuffer buffer) {

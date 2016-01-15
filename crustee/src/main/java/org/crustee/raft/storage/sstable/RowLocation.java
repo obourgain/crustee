@@ -1,6 +1,7 @@
 package org.crustee.raft.storage.sstable;
 
 import java.nio.ByteBuffer;
+import org.crustee.raft.storage.sstable.index.IndexWriter;
 
 /**
  * Indicate where located the row is located in the table file, based on data from the index.
@@ -9,7 +10,7 @@ public class RowLocation {
 
     public static final RowLocation NOT_FOUND = new RowLocation((short) -1, -1, -1);
 
-    private static final int SERIALIZED_SIZE = Short.BYTES + Long.BYTES + Integer.BYTES;
+    private static final int SERIALIZED_SIZE = IndexWriter.INDEX_ENTRY_KEY_OFFSET_SIZE_LENGTH;
 
     private final short rowKeySize;
     private final long offset;
@@ -67,10 +68,10 @@ public class RowLocation {
 
     @Override
     public String toString() {
-        return "KVLocalisation{" +
+        return "RowLocation{" +
                 "rowKeySize=" + rowKeySize +
-                ", valueSize=" + valueSize +
                 ", offset=" + offset +
+                ", valueSize=" + valueSize +
                 '}';
     }
 }

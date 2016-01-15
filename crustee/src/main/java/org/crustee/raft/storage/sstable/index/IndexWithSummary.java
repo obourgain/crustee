@@ -14,12 +14,9 @@ public class IndexWithSummary implements IndexReader {
         this.summary = summary;
     }
 
-    public static long readCount = 0;
-
     @Override
     public RowLocation findRowLocation(ByteBuffer searchedKey) {
         int startAt = summary.previousIndexEntryLocation(searchedKey);
-        readCount++;
         return delegate.findRowLocation(searchedKey, startAt, summary.getSamplingInterval());
     }
 

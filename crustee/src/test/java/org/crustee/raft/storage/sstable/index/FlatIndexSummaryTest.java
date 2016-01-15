@@ -2,9 +2,11 @@ package org.crustee.raft.storage.sstable.index;
 
 import static java.util.Collections.singletonMap;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.stream.IntStream;
+import org.assertj.core.api.Assertions;
 import org.crustee.raft.storage.memtable.LockFreeBTreeMemtable;
 import org.crustee.raft.storage.memtable.WritableMemtable;
 import org.crustee.raft.storage.sstable.AbstractSSTableTest;
@@ -70,4 +72,14 @@ public class FlatIndexSummaryTest extends AbstractSSTableTest {
         return memtable;
     }
 
+    @Test
+    public void name() throws Exception {
+        for (int i = 0; i < Integer.MAX_VALUE; i++) {
+            if(i % 128 != (i & (128 - 1))) {
+                fail("" + i);
+            }
+        }
+
+
+    }
 }

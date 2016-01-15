@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.LongStream;
 import org.crustee.raft.storage.commitlog.CommitLog;
 import org.crustee.raft.storage.commitlog.SegmentFactory;
-import org.crustee.raft.storage.sstable.index.IndexWithSummary;
 import org.crustee.raft.storage.sstable.index.MmapIndexReader;
 import org.crustee.raft.storage.table.CrusteeTable;
 import org.slf4j.Logger;
@@ -170,7 +169,6 @@ public class CrusteeWriter {
             logger.info("done reading in {} ms, found {}, not found {}", duration, found, notFound);
         }
 
-        System.out.println("IndexWithSummary.readCount " + IndexWithSummary.readCount);
         System.out.println("MmapIndexReader.globalScannedEntries " + MmapIndexReader.globalScannedEntries);
 
         System.exit(0);
