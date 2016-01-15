@@ -7,9 +7,9 @@ import org.crustee.raft.storage.sstable.RowLocation;
 public class IndexWithSummary implements IndexReader {
 
     private final InternalIndexReader delegate;
-    private final TreeMapIndexSummary summary;
+    private final IndexSummary summary;
 
-    IndexWithSummary(InternalIndexReader delegate, TreeMapIndexSummary summary) {
+    IndexWithSummary(InternalIndexReader delegate, IndexSummary summary) {
         this.delegate = delegate;
         this.summary = summary;
     }

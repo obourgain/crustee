@@ -18,7 +18,7 @@ public class MmapIndexReader implements InternalIndexReader {
     private static final Logger logger = getLogger(MmapIndexReader.class);
 
     private final MappedByteBuffer map;
-    private final long indexFileSize;
+    final long indexFileSize;
     private volatile boolean closed = false;
 
     MmapIndexReader(Path index) {

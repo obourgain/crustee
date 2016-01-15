@@ -6,7 +6,7 @@ import java.util.TreeMap;
 import org.assertj.core.util.VisibleForTesting;
 import org.crustee.raft.utils.ByteBufferUtils;
 
-class TreeMapIndexSummary {
+class TreeMapIndexSummary implements IndexSummary {
 
     private final int samplingInterval;
     @VisibleForTesting
@@ -17,7 +17,8 @@ class TreeMapIndexSummary {
         load(indexReader);
     }
 
-    int previousIndexEntryLocation(ByteBuffer key) {
+    @Override
+    public int previousIndexEntryLocation(ByteBuffer key) {
         // there is a copy of the entry in TreeMap.floorEntry, we may be able to avoid the allocation if there is a way to return only the value
         Map.Entry<ByteBuffer, Integer> position = positions.floorEntry(key);
         if (position == null) {
@@ -39,7 +40,8 @@ class TreeMapIndexSummary {
         positions.put(key, position);
     }
 
-    int getSamplingInterval() {
+    @Override
+    public int getSamplingInterval() {
         return samplingInterval;
     }
 }

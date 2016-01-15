@@ -26,40 +26,15 @@ public class ByteBufferUtils {
             assert o1.position() == 0 : "only works when buffer's position is 0";
             assert o2.position() == 0 : "only works when buffer's position is 0";
             int lengthDifference = o1.remaining() - o2.remaining();
-            if(lengthDifference != 0) {
+            if (lengthDifference != 0) {
                 return lengthDifference;
             }
 
             // buffers have the same length, so this is safe
             int longComparisons = o1.limit() & ~7;
             int i = 0;
-            for (; i < longComparisons ; i += Longs.BYTES) {
+            for (; i < longComparisons; i += Longs.BYTES) {
                 int cmp = Long.compare(o1.getLong(i), o2.getLong(i));
-                if (cmp != 0) {
-                    return cmp;
-                }
-            }
-
-            return compareBytes(o1, o2, i);
-        }
-    };
-
-    public static final Comparator<ByteBuffer> fooComparator = new Comparator<ByteBuffer>() {
-        @Override
-        public int compare(ByteBuffer o1, ByteBuffer o2) {
-            assert o1.position() == 0 : "only works when buffer's position is 0";
-            assert o2.position() == 0 : "only works when buffer's position is 0";
-            int lengthDifference = o1.remaining() - o2.remaining();
-            if(lengthDifference != 0) {
-                return lengthDifference;
-            }
-
-            // buffers have the same length, so this is safe
-            int intComparisons = o1.limit() & ~3;
-            int i = 0;
-            for (; i < intComparisons ; i += Integer.BYTES) {
-                // TODO should this be unsigned comparison ?
-                int cmp = Integer.compare(o1.getInt(i), o2.getInt(i));
                 if (cmp != 0) {
                     return cmp;
                 }
